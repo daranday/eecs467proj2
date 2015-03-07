@@ -6,35 +6,30 @@
 
 #include <lcm/lcm_coretypes.h>
 
-#ifndef __maebot_laser_scan_t_hpp__
-#define __maebot_laser_scan_t_hpp__
+#ifndef __maebot_occupancy_grid_t_hpp__
+#define __maebot_occupancy_grid_t_hpp__
 
 #include <vector>
 
 
-class maebot_laser_scan_t
+class maebot_occupancy_grid_t
 {
     public:
         int64_t    utime;
 
-        /**
-         * Measured range in meters
-         * Measurement angle in radians
-         * Measurement time was taken in usec
-         * Measurement intensity -- unitless
-         */
-        int32_t    num_ranges;
+        float      origin_x;
 
-        std::vector< float > ranges;
+        float      origin_y;
 
-        /// [m]
-        std::vector< float > thetas;
+        float      meters_per_cell;
 
-        /// [rad]
-        std::vector< int64_t > times;
+        int32_t    width;
 
-        /// [usec]
-        std::vector< float > intensities;
+        int32_t    height;
+
+        int32_t    num_cells;
+
+        std::vector< int8_t > cells;
 
     public:
         /**
@@ -72,7 +67,7 @@ class maebot_laser_scan_t
         inline static int64_t getHash();
 
         /**
-         * Returns "maebot_laser_scan_t"
+         * Returns "maebot_occupancy_grid_t"
          */
         inline static const char* getTypeName();
 
@@ -83,7 +78,7 @@ class maebot_laser_scan_t
         inline static int64_t _computeHash(const __lcm_hash_ptr *p);
 };
 
-int maebot_laser_scan_t::encode(void *buf, int offset, int maxlen) const
+int maebot_occupancy_grid_t::encode(void *buf, int offset, int maxlen) const
 {
     int pos = 0, tlen;
     int64_t hash = getHash();
@@ -97,7 +92,7 @@ int maebot_laser_scan_t::encode(void *buf, int offset, int maxlen) const
     return pos;
 }
 
-int maebot_laser_scan_t::decode(const void *buf, int offset, int maxlen)
+int maebot_occupancy_grid_t::decode(const void *buf, int offset, int maxlen)
 {
     int pos = 0, thislen;
 
@@ -112,107 +107,106 @@ int maebot_laser_scan_t::decode(const void *buf, int offset, int maxlen)
     return pos;
 }
 
-int maebot_laser_scan_t::getEncodedSize() const
+int maebot_occupancy_grid_t::getEncodedSize() const
 {
     return 8 + _getEncodedSizeNoHash();
 }
 
-int64_t maebot_laser_scan_t::getHash()
+int64_t maebot_occupancy_grid_t::getHash()
 {
     static int64_t hash = _computeHash(NULL);
     return hash;
 }
 
-const char* maebot_laser_scan_t::getTypeName()
+const char* maebot_occupancy_grid_t::getTypeName()
 {
-    return "maebot_laser_scan_t";
+    return "maebot_occupancy_grid_t";
 }
 
-int maebot_laser_scan_t::_encodeNoHash(void *buf, int offset, int maxlen) const
+int maebot_occupancy_grid_t::_encodeNoHash(void *buf, int offset, int maxlen) const
 {
     int pos = 0, tlen;
 
     tlen = __int64_t_encode_array(buf, offset + pos, maxlen - pos, &this->utime, 1);
     if(tlen < 0) return tlen; else pos += tlen;
 
-    tlen = __int32_t_encode_array(buf, offset + pos, maxlen - pos, &this->num_ranges, 1);
+    tlen = __float_encode_array(buf, offset + pos, maxlen - pos, &this->origin_x, 1);
     if(tlen < 0) return tlen; else pos += tlen;
 
-    if(this->num_ranges > 0) {
-        tlen = __float_encode_array(buf, offset + pos, maxlen - pos, &this->ranges[0], this->num_ranges);
-        if(tlen < 0) return tlen; else pos += tlen;
-    }
+    tlen = __float_encode_array(buf, offset + pos, maxlen - pos, &this->origin_y, 1);
+    if(tlen < 0) return tlen; else pos += tlen;
 
-    if(this->num_ranges > 0) {
-        tlen = __float_encode_array(buf, offset + pos, maxlen - pos, &this->thetas[0], this->num_ranges);
-        if(tlen < 0) return tlen; else pos += tlen;
-    }
+    tlen = __float_encode_array(buf, offset + pos, maxlen - pos, &this->meters_per_cell, 1);
+    if(tlen < 0) return tlen; else pos += tlen;
 
-    if(this->num_ranges > 0) {
-        tlen = __int64_t_encode_array(buf, offset + pos, maxlen - pos, &this->times[0], this->num_ranges);
-        if(tlen < 0) return tlen; else pos += tlen;
-    }
+    tlen = __int32_t_encode_array(buf, offset + pos, maxlen - pos, &this->width, 1);
+    if(tlen < 0) return tlen; else pos += tlen;
 
-    if(this->num_ranges > 0) {
-        tlen = __float_encode_array(buf, offset + pos, maxlen - pos, &this->intensities[0], this->num_ranges);
+    tlen = __int32_t_encode_array(buf, offset + pos, maxlen - pos, &this->height, 1);
+    if(tlen < 0) return tlen; else pos += tlen;
+
+    tlen = __int32_t_encode_array(buf, offset + pos, maxlen - pos, &this->num_cells, 1);
+    if(tlen < 0) return tlen; else pos += tlen;
+
+    if(this->num_cells > 0) {
+        tlen = __int8_t_encode_array(buf, offset + pos, maxlen - pos, &this->cells[0], this->num_cells);
         if(tlen < 0) return tlen; else pos += tlen;
     }
 
     return pos;
 }
 
-int maebot_laser_scan_t::_decodeNoHash(const void *buf, int offset, int maxlen)
+int maebot_occupancy_grid_t::_decodeNoHash(const void *buf, int offset, int maxlen)
 {
     int pos = 0, tlen;
 
     tlen = __int64_t_decode_array(buf, offset + pos, maxlen - pos, &this->utime, 1);
     if(tlen < 0) return tlen; else pos += tlen;
 
-    tlen = __int32_t_decode_array(buf, offset + pos, maxlen - pos, &this->num_ranges, 1);
+    tlen = __float_decode_array(buf, offset + pos, maxlen - pos, &this->origin_x, 1);
     if(tlen < 0) return tlen; else pos += tlen;
 
-    this->ranges.resize(this->num_ranges);
-    if(this->num_ranges) {
-        tlen = __float_decode_array(buf, offset + pos, maxlen - pos, &this->ranges[0], this->num_ranges);
-        if(tlen < 0) return tlen; else pos += tlen;
-    }
+    tlen = __float_decode_array(buf, offset + pos, maxlen - pos, &this->origin_y, 1);
+    if(tlen < 0) return tlen; else pos += tlen;
 
-    this->thetas.resize(this->num_ranges);
-    if(this->num_ranges) {
-        tlen = __float_decode_array(buf, offset + pos, maxlen - pos, &this->thetas[0], this->num_ranges);
-        if(tlen < 0) return tlen; else pos += tlen;
-    }
+    tlen = __float_decode_array(buf, offset + pos, maxlen - pos, &this->meters_per_cell, 1);
+    if(tlen < 0) return tlen; else pos += tlen;
 
-    this->times.resize(this->num_ranges);
-    if(this->num_ranges) {
-        tlen = __int64_t_decode_array(buf, offset + pos, maxlen - pos, &this->times[0], this->num_ranges);
-        if(tlen < 0) return tlen; else pos += tlen;
-    }
+    tlen = __int32_t_decode_array(buf, offset + pos, maxlen - pos, &this->width, 1);
+    if(tlen < 0) return tlen; else pos += tlen;
 
-    this->intensities.resize(this->num_ranges);
-    if(this->num_ranges) {
-        tlen = __float_decode_array(buf, offset + pos, maxlen - pos, &this->intensities[0], this->num_ranges);
+    tlen = __int32_t_decode_array(buf, offset + pos, maxlen - pos, &this->height, 1);
+    if(tlen < 0) return tlen; else pos += tlen;
+
+    tlen = __int32_t_decode_array(buf, offset + pos, maxlen - pos, &this->num_cells, 1);
+    if(tlen < 0) return tlen; else pos += tlen;
+
+    this->cells.resize(this->num_cells);
+    if(this->num_cells) {
+        tlen = __int8_t_decode_array(buf, offset + pos, maxlen - pos, &this->cells[0], this->num_cells);
         if(tlen < 0) return tlen; else pos += tlen;
     }
 
     return pos;
 }
 
-int maebot_laser_scan_t::_getEncodedSizeNoHash() const
+int maebot_occupancy_grid_t::_getEncodedSizeNoHash() const
 {
     int enc_size = 0;
     enc_size += __int64_t_encoded_array_size(NULL, 1);
+    enc_size += __float_encoded_array_size(NULL, 1);
+    enc_size += __float_encoded_array_size(NULL, 1);
+    enc_size += __float_encoded_array_size(NULL, 1);
     enc_size += __int32_t_encoded_array_size(NULL, 1);
-    enc_size += __float_encoded_array_size(NULL, this->num_ranges);
-    enc_size += __float_encoded_array_size(NULL, this->num_ranges);
-    enc_size += __int64_t_encoded_array_size(NULL, this->num_ranges);
-    enc_size += __float_encoded_array_size(NULL, this->num_ranges);
+    enc_size += __int32_t_encoded_array_size(NULL, 1);
+    enc_size += __int32_t_encoded_array_size(NULL, 1);
+    enc_size += __int8_t_encoded_array_size(NULL, this->num_cells);
     return enc_size;
 }
 
-int64_t maebot_laser_scan_t::_computeHash(const __lcm_hash_ptr *)
+int64_t maebot_occupancy_grid_t::_computeHash(const __lcm_hash_ptr *)
 {
-    int64_t hash = 0xc4ee2dc3cd282b67LL;
+    int64_t hash = 0x6aa23f24a5336649LL;
     return (hash<<1) + ((hash>>63)&1);
 }
 
