@@ -15,13 +15,18 @@ LIB_EECS467 = $(LIB_PATH)/libeecs467.a
 LIBEECS467_OBJS = ../apps/eecs467_util.o
 
 BIN_A2_MASK = $(BIN_PATH)/a2_mask
+BIN_A2_COLOR_PICKER = $(BIN_PATH)/a2_color_picker
 
-ALL = $(BIN_A2_MASK)
+ALL = $(BIN_A2_MASK) $(BIN_A2_COLOR_PICKER)
 
 all: $(ALL)
 
 
 $(BIN_A2_MASK): a2_mask.o $(LIBDEPS) $(LIBEECS467_OBJS)
+	@echo "\t$@"
+	@$(CXX) -o $@ $^ $(LDFLAGS) $(CXXFLAGS)
+
+$(BIN_A2_COLOR_PICKER): a2_color_picker.o $(LIBDEPS) $(LIBEECS467_OBJS)
 	@echo "\t$@"
 	@$(CXX) -o $@ $^ $(LDFLAGS) $(CXXFLAGS)
 

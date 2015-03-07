@@ -36,7 +36,8 @@ using namespace std;
 static int mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_t *pos, vx_mouse_event_t *mouse);
 static int key_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_key_event_t *key);
 static int touch_event (vx_event_handler_t *vh, vx_layer_t *vl, vx_camera_pos_t *pos, vx_touch_event_t *mouse);
-void update_image(image_u32_t* im);
+void show_image(image_u32_t* im);
+void rgb_to_hsv(uint32_t rgba, double& h, double& s, double& v);
 
 struct state_t {
     // take a pic required
@@ -44,6 +45,7 @@ struct state_t {
     image_source_t *isrc;
     int fidx;
     pthread_mutex_t mutex;
+    pthread_mutex_t cmd_mutex;
     int fmt_x, fmt_y;
 
     // vx_world required
@@ -58,10 +60,23 @@ struct state_t {
     int   img_width;
     image_u32_t* image;
     image_u32_t* layered_image;
-    int   p1_x;
-    int   p1_y;
-    int   p2_x;
-    int   p2_y;
+    
+    // color picker state
+    double h_min_last;
+    double s_min_last;
+    double v_min_last;
+    double h_max_last;
+    double s_max_last;
+    double v_max_last;
+
+    double h_min;
+    double s_min;
+    double v_min;
+    double h_max;
+    double s_max;
+    double v_max;
+    int hsv_state;
+
 
 
     // selection state
@@ -96,6 +111,11 @@ struct state_t {
         // bbox selection
         selection_state = 0;
         layered_image = NULL;
+
+        // hsv_init
+        hsv_state = 0;
+        h_min = 1; s_min = 1; v_min = 1; 
+        h_max = 0; s_max = 0; v_max = 0; 
     }
 
     //clean up
@@ -110,8 +130,75 @@ struct state_t {
             pg_destroy (pg);
 
         image_u32_destroy (image);
-        if (layered_image != NULL)
+        if (layered_image != NULL) {
             image_u32_destroy (layered_image);
+            layered_image = NULL;
+        }
+    }
+
+    void update_layered_image() {
+        int count = 0;
+        for (int j = 0; j < layered_image->height; ++j) {
+            for (int i = 0; i < layered_image->width; ++i) {
+                double h, s, v;
+                rgb_to_hsv(image->buf[j*image->stride+i], h, s, v);
+                if (h_min <= h && h <= h_max && s_min <= s && s <= s_max && v_min <= v && v <= v_max) {
+                    layered_image->buf[j*layered_image->stride+i] = 0x800080FF; // mark purple
+                    count ++;
+                }
+            }
+        }
+        printf("%d updated\n", count);
+        show_image(layered_image);
+    }
+
+    void update_hsv(double h, double s, double v) {
+        h_min_last = h_min;
+        s_min_last = s_min;
+        v_min_last = v_min;
+        h_max_last = h_max;
+        s_max_last = s_max;
+        v_max_last = v_max;
+
+        h_min = min(h_min, h);
+        s_min = min(s_min, s);
+        v_min = min(v_min, v);
+        h_max = max(h_max, h);
+        s_max = max(s_max, s);
+        v_max = max(v_max, v);
+
+        // create layer if not already
+        if (hsv_state == 0) {
+            layered_image = image_u32_copy(image);
+        }
+        
+        update_layered_image();
+        hsv_state++;
+
+    }
+
+    void undo_hsv() {
+        if (hsv_state == 0) {
+            printf("Error: Already at original, cannot undo\n");
+            return;
+        }
+        h_min = h_min_last;
+        s_min = s_min_last;
+        v_min = v_min_last;
+        h_max = h_max_last;
+        s_max = s_max_last;
+        v_max = v_max_last;
+
+        hsv_state--;
+        image_u32_destroy (layered_image);
+        if (hsv_state == 0) {
+            layered_image = NULL;
+            show_image(image);
+        } else {
+            layered_image = image_u32_copy(image);
+            update_layered_image();
+        }
+        printf("Undid last color selection\n");
     }
 } state_obj;
 
@@ -223,7 +310,7 @@ image_u32_t* take_a_pic (char* output_image_path)
     //write image to outputpath in pnm format
     //only if output image path is not empty
     if (strcmp(output_image_path, "") != 0) {
-        string dest = string(output_image_path) + "BeforeMask.ppm";
+        string dest = string(output_image_path) + "BeforeColorSelect.ppm";
         image_u32_write_pnm(img, dest.c_str());
     }
     
@@ -255,27 +342,31 @@ static void my_param_changed (parameter_listener_t *pl, parameter_gui_t *pg, con
     // button clicks
     if (0==strcmp("button_clear", name)) {
 
-    } else if (0==strcmp("button_capture", name)) {
-        state->image = take_a_pic("");
+    // } else if (0==strcmp("button_capture", name)) {
+    //     state->image = take_a_pic("");
 
     } else if (0==strcmp("button_save", name)) {
-        if (state->selection_state < 2) {
-            printf("Error: Please select your bounding box vertices\n");
+        if (state->hsv_state == 0) {
+            printf("Error: No hsv ranges to save\n");
             return;
         }
-        ofstream fout("Mask.txt");
-        fout << state->p1_x << ", " << state->p1_y << endl;
-        fout << state->p2_x << ", " << state->p2_y << endl;
+        ofstream fout("HsvRange.txt");
+        fout << state->h_min << " " << state->h_max << " "
+             << state->s_min << " " << state->s_max << " "
+             << state->v_min << " " << state->v_max << endl;
         fout.close();
-        printf("File saved to Mask.txt\n");
+        printf("File saved to HsvRange.txt\n");
     } 
 
     //for any button click, clear the selection
     if (0==strncmp("button", name, 6)) {
-        state->selection_state = 0;
+        state->hsv_state = 0;
+        state->h_min = 1; state->s_min = 1; state->v_min = 1; 
+        state->h_max = 0; state->s_max = 0; state->v_max = 0; 
+
         image_u32_destroy (state->layered_image);
         state->layered_image = NULL;
-        update_image(state->image);
+        show_image(state->image);
     }
     
 }
@@ -286,12 +377,26 @@ void get_image_coordinates(double x, double y, int& coord_x, int& coord_y) {
     printf("Coords x = %d, y = %d\n", coord_x, coord_y);
 }
 
-void mask_point(image_u32_t* im, int i, int j) {
-    uint32_t rr = max((im->buf[j*im->stride+i] & 0xFF000000) - 0x1F000000, (uint32_t)0);
-    uint32_t gg = max((im->buf[j*im->stride+i] & 0x00FF0000) - 0x001F0000, (uint32_t)0);
-    uint32_t bb = max((im->buf[j*im->stride+i] & 0x0000FF00) - 0x00001F00, (uint32_t)0);
-    uint32_t aa = im->buf[j*im->stride+i] & 0x000000FF;
-    im->buf[j*im->stride+i] = rr + gg + bb + aa;
+void rgb_to_hsv(uint32_t rgba, double& h, double& s, double& v){
+    double r = ((rgba & 0xFF000000) >> 24) / 255.;
+    double g = ((rgba & 0x00FF0000) >> 16) / 255.;
+    double b = ((rgba & 0x0000FF00) >> 8) / 255.;
+    double rgb_max = std::max(r, std::max(g, b));
+    double rgb_min = std::min(r, std::min(g, b));
+    double delta = rgb_max - rgb_min;
+    s = delta / (rgb_max + 1e-20f);
+    v = rgb_max;
+
+    double hue;
+    if (r == rgb_max)
+        hue = (g - b) / (delta + 1e-20f);
+    else if (g == rgb_max)
+        hue = 2 + (b - r) / (delta + 1e-20f);
+    else
+        hue = 4 + (r - g) / (delta + 1e-20f);
+    if (hue < 0)
+        hue += 6.f;
+    h = hue * (1.f / 6.f);
 }
 
 static int mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_t *pos, vx_mouse_event_t *mouse)
@@ -310,41 +415,23 @@ static int mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_
         double ground[3];
         vx_ray3_intersect_xy (&ray, 0, ground);
 
-        printf ("Mouse clicked at coords: [%8.3f, %8.3f]  Ground clicked at coords: [%6.3f, %6.3f]\n",
-                mouse->x, mouse->y, ground[0], ground[1]);
+        // printf ("Mouse clicked at coords: [%8.3f, %8.3f]  Ground clicked at coords: [%6.3f, %6.3f]\n", mouse->x, mouse->y, ground[0], ground[1]);
 
-        // selecting bounding box
-        if (state->selection_state == 0) {
-            state->layered_image = image_u32_copy(state->image);
-            image_u32_t* im = state->layered_image;
-            int h = im->height, w = im->width, current_width;
-            get_image_coordinates(ground[0], ground[1], state->p1_x, state->p1_y);
-            for (int j = 0; j < h; ++j) {
-                if (j < state->p1_y)
-                    current_width = w;
-                else
-                    current_width = state->p1_x;
-
-                for (int i = 0; i < current_width; ++i)
-                    mask_point(im, i, j);
-            }
-            update_image(im);
-        } else if (state->selection_state == 1) {
-            image_u32_t* im = state->layered_image;
-            int h = im->height, w = im->width, start_width;
-            get_image_coordinates(ground[0], ground[1], state->p2_x, state->p2_y);
-            for (int j = state->p1_y; j < h; ++j) {
-                if (j < state->p2_y)
-                    start_width = state->p2_x;
-                else
-                    start_width = state->p1_x;
-
-                for (int i = start_width; i < w; ++i)
-                    mask_point(im, i, j);
-            }
-            update_image(im);
+        int image_x, image_y;
+        get_image_coordinates(ground[0], ground[1], image_x, image_y);
+        if (image_x < 0 || image_x > state->fmt_x || image_y < 0 || image_y > state->fmt_y) {
+            printf("Error: mouse click outside of image\n");
+            return 1;
         }
-        state->selection_state++;
+
+        double h, s, v;
+
+        // update new hsv range
+        uint32_t rgb = state->image->buf[image_y * state->image->stride + image_x];
+        rgb_to_hsv(rgb, h, s, v);
+        printf("haha\n");
+        state->update_hsv(h, s, v);
+        printf("haha\n");
     }
 
     // store previous mouse event to see if the user *just* clicked or released
@@ -355,7 +442,25 @@ static int mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_
 
 static int key_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_key_event_t *key)
 {
-    //state_t *state = vxeh->impl;
+    pthread_mutex_lock(&state->cmd_mutex);
+    if (key->released) {
+        if (key->key_code == 's' || key->key_code == 'S') {
+            if (state->hsv_state == 0) {
+                printf("Error: No hsv ranges to save\n");
+                return 1;
+            }
+            ofstream fout("HsvRange.txt");
+            fout << state->h_min << " " << state->h_max << " "
+                 << state->s_min << " " << state->s_max << " "
+                 << state->v_min << " " << state->v_max << endl;
+            fout.close();
+            printf("File saved to HsvRange.txt\n");
+        } else if (key->key_code == VX_KEY_DEL) {
+            state->undo_hsv();
+        }
+    }
+    pthread_mutex_unlock(&state->cmd_mutex);
+
     return 0;
 }
 
@@ -364,7 +469,7 @@ static int touch_event (vx_event_handler_t *vh, vx_layer_t *vl, vx_camera_pos_t 
     return 0; // Does nothing
 }
 
-void update_image(image_u32_t* im) {
+void show_image(image_u32_t* im) {
     vx_object_t *vim = vxo_image_from_u32(im,
                                       VXO_IMAGE_FLIPY,
                                       VX_TEX_MIN_FILTER | VX_TEX_MAG_FILTER);
@@ -382,7 +487,7 @@ void *animate_thread (void *data)
 {
     image_u32_t *im = state->image;
     if (im != NULL) {
-        update_image(state->image);
+        show_image(state->image);
     }
     return NULL;
 }
@@ -420,7 +525,7 @@ void run_graphics(int argc, char** argv) {
     //                     "cb2", "Check Box 2", 1,
     //                     NULL);
     pg_add_buttons (state->pg,
-                    "button_capture", "Capture",
+                    // "button_capture", "Capture",
                     "button_clear", "Clear Selection",
                     "button_save", "Save",
                     NULL);
