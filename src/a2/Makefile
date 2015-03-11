@@ -16,8 +16,9 @@ LIBEECS467_OBJS = ../apps/eecs467_util.o
 
 BIN_A2_MASK = $(BIN_PATH)/a2_mask
 BIN_A2_COLOR_PICKER = $(BIN_PATH)/a2_color_picker
+BIN_A2_BLOB_DETECTOR = $(BIN_PATH)/a2_blob_detector
 
-ALL = $(BIN_A2_MASK) $(BIN_A2_COLOR_PICKER)
+ALL = $(BIN_A2_MASK) $(BIN_A2_COLOR_PICKER) $(BIN_A2_BLOB_DETECTOR)
 
 all: $(ALL)
 
@@ -28,6 +29,10 @@ $(BIN_A2_MASK): a2_mask.o $(LIBDEPS) $(LIBEECS467_OBJS)
 
 $(BIN_A2_COLOR_PICKER): a2_color_picker.o $(LIBDEPS) $(LIBEECS467_OBJS)
 	@echo "\t$@"
+	@$(CXX) -o $@ $^ $(LDFLAGS) $(CXXFLAGS)
+
+$(BIN_A2_BLOB_DETECTOR): a2_blob_detector.o $(LIBDEPS) $(LIBEECS467_OBJS)
+	@echo "t\$@"
 	@$(CXX) -o $@ $^ $(LDFLAGS) $(CXXFLAGS)
 
 clean:
