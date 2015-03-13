@@ -27,7 +27,7 @@ struct RGB{
 };
 
 void HSV_to_RGB( double H, double S, double V ){
-    double      hh, p, q, t, ff;
+    double hh, p, q, t, ff;
     double R, G, B;
     long        i;
     //V = V/100.0;

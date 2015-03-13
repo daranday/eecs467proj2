@@ -152,7 +152,7 @@ struct r_data{
   r_data(){
     area = xmax = ymax = xmin = ymin = 0;
   }
-}
+};
 
 class blob_detect{
 public:
