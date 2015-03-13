@@ -4,6 +4,7 @@
 #include <vector>
 #include <cmath>
 #include <iostream>
+#include <fstream>
 using namespace std;
 
 double Hmin = 168;
@@ -25,6 +26,17 @@ struct RGB{
   uint8_t G;
   uint8_t B;
 };
+
+struct thresh{
+  double Hmin;
+  double Hmax;
+  double Smin;
+  double Smax;
+  double Vmin;
+  double Vmax;
+};
+
+
 
 void HSV_to_RGB( double H, double S, double V ){
     double hh, p, q, t, ff;
@@ -146,11 +158,12 @@ void RGB_to_HSV( uint8_t R, uint8_t G, uint8_t B, HSV &out ){
 
 struct r_data{
   int area;
-  int xmax, ymax, xmin, ymin;
+  double x, y;
   //center of mass will be intersection of these 4 points
 
   r_data(){
-    area = xmax = ymax = xmin = ymin = 0;
+    area = 0;
+    x = y = 0;
   }
 };
 
@@ -161,6 +174,7 @@ public:
   int region;
   //index in region is the region's area
   vector<r_data> region_data;
+  vector<thresh> colors;
 
   blob_detect(){
     get_u8x3();
@@ -171,6 +185,31 @@ public:
   ~blob_detect(){
     image_u8x3_destroy( image_83 );
     image_u8x3_destroy( region_83 );
+  }
+
+  void get_colors(){
+    thresh color;
+    ifstream input;
+    input.open( "color_input.txt" );
+    while( !input.eof() ){
+      input >> color.Hmin >> color.Hmax >> color.Smin >> color.Smax >> color.Vmin >> color.Vmax;
+      colors.push_back(color);
+    }
+    cout << "colors " << colors.size() << endl;
+    cout << colors[1].Hmin << " " << colors[1].Hmax << " " << colors[1].Smin << " " << colors[1].Smax << " " << colors[1].Vmin << " " << colors[1].Vmax << endl;
+
+  }
+
+  int which_color( HSV input ){
+    for(int i = 0; i < int(colors.size()); i++){
+      if( input.H >= colors[i].Hmin && input.H <= colors[i].Hmax &&
+	  input.S >= colors[i].Smin && input.S <= colors[i].Smax &&
+	  input.V >= colors[i].Vmin && input.V <= colors[i].Vmax){
+	return i;
+      }
+    }
+    return -1;
+
   }
 
   //read in some image and convert it to u8x3 format
@@ -207,12 +246,14 @@ public:
   
 
   //returns true if the pixel is inbounds and the color we're looking for
-  bool good_pixel(int pixel){
+  bool good_pixel(int pixel, int c_index){
     HSV temp;
     if (pixel >= 0 && pixel < (image_83->width*3 * image_83->height*image_83->stride) && region_83->buf[pixel] == 0 ){
       RGB_to_HSV( image_83->buf[pixel], image_83->buf[pixel+1], image_83->buf[pixel+2], temp);
       
-      if( temp.H >= Hmin && temp.H <= Hmax && temp.S >= Smin && temp.S <= Smax && temp.V >= Vmin && temp.V <= Vmax){
+      if( colors[c_index].Hmin <= temp.H && colors[c_index].Hmax >= temp.H &&
+	  colors[c_index].Smin <= temp.S && colors[c_index].Smax >= temp.S &&
+	  colors[c_index].Vmin <= temp.V && colors[c_index].Vmax >= temp.V ){
 	//cout << "here" << endl;
 	return true;
       }
@@ -221,9 +262,9 @@ public:
 
   }
 
-  void connect_pixels(int pixel){
+  void connect_pixels(int pixel, int c_index){
     int temp = 0;
-    int xmin = 0, xmax = 0, ymin = 0, ymax = 0, area = 0;
+    int x_sum = 0, y_sum = 0, area = 0;
     r_data t;
     stack<int> pixels;
     pixels.push( pixel );
@@ -237,60 +278,58 @@ public:
       //add the region to the popped pixel
       region_83->buf[temp] = region;
 
-      
-      
-
-
       //Find the neighboring pixels
       //NW
-      if( good_pixel( temp - image_83->stride - 3 ) ){
-	pixels.push( temp - image_83->stride - 3 );
+      if( good_pixel( temp - image_83->stride - 3, c_index ) ){
+	pixels.push( temp - image_83->stride - 3);
+	y_sum -=image_83->stride;
+	x_sum -= 3;
       }
       //N
-      if( good_pixel( temp - image_83->stride ) ){
+      if( good_pixel( temp - image_83->stride, c_index ) ){
 	pixels.push( temp - image_83->stride);
-	if( ymin > temp - image_83->stride )
-	  ymin = temp - image_83->stride;
+	y_sum -=image_83->stride;
       }
       //NE
-      if( good_pixel( temp - image_83->stride + 3 ) ){
+      if( good_pixel( temp - image_83->stride + 3, c_index ) ){
 	pixels.push( temp - image_83->stride + 3 );
+	y_sum -=image_83->stride;
+	x_sum += 3;
       }
       //E
-      if( good_pixel( temp + 3 ) ){
+      if( good_pixel( temp + 3, c_index ) ){
 	pixels.push( temp + 3 );
-	if( xmax < temp + 3 )
-	  xmax = temp+3;
+	x_sum += 3;
       }
       //SE
-      if( good_pixel( temp + image_83->stride + 3 ) ){
+      if( good_pixel( temp + image_83->stride + 3, c_index ) ){
 	pixels.push( temp + image_83->stride + 3 );
+	y_sum +=image_83->stride;
+	x_sum += 3;
       }
       //S
-      if( good_pixel( temp + image_83->stride ) ){
+      if( good_pixel( temp + image_83->stride, c_index ) ){
 	pixels.push( temp + image_83->stride );
-	if( ymax < temp + image_83->stride )
-	    ymax = temp + image_83->stride;
+	y_sum +=image_83->stride;
       }
       //SW
-      if( good_pixel( temp + image_83->stride - 3 ) ){
+      if( good_pixel( temp + image_83->stride - 3, c_index ) ){
 	pixels.push( temp + image_83->stride - 3 );
+	y_sum +=image_83->stride;
+	x_sum -= 3;
       }
       //W
-      if( good_pixel( temp - 3 ) ){
+      if( good_pixel( temp - 3, c_index ) ){
 	pixels.push( temp - 3 );
-	if( xmin > temp -3)
-	  xmin = temp - 3;
+	x_sum -= 3;
       }
       
 	
     }
     
     t.area = area;
-    t.xmin = xmin;
-    t.xmax = xmax;
-    t.ymin = ymin;
-    t.ymax = ymax;
+    t.x = double(x_sum) / double(area);
+    t.y = double(y_sum) / double(area);
     area = 0;
     
     region_data.push_back( t );
@@ -299,6 +338,7 @@ public:
 
   void run_detector(){
     int index = 0;
+    int color_index = -1;
     HSV temp;
     //iterate through all elements of the buffer to find all pixels
     for(int y = 0; y < image_83->height; y++){
@@ -306,11 +346,12 @@ public:
 	//looking for just green now
 	index = 3*x + y*image_83->stride;
 	if( region_83->buf[ index] == 0 ){
-
-	  RGB_to_HSV( image_83->buf[index], image_83->buf[index+1], image_83->buf[index+2], temp);
 	  
-	  if( temp.H >= Hmin && temp.H <= Hmax && temp.S >= Smin && temp.S <= Smax && temp.V >= Vmin && temp.V <= Vmax){
-	    connect_pixels( index);
+	  RGB_to_HSV( image_83->buf[index], image_83->buf[index+1], image_83->buf[index+2], temp);
+	  color_index = which_color(temp);
+	  
+	  if( color_index != -1){
+	    connect_pixels( index, color_index);
 	    region+=40;
 	  }
 		
@@ -322,12 +363,18 @@ public:
 	
      //output for debugging
     image_u8x3_write_pnm( region_83, "pic_out.ppm" );
+
+    for(int i = 1; i < region_data.size(); i++)
+	cout << "region: " << i << " area: " << region_data[i].area << " x: " << region_data[i].x << " y: " << region_data[i].y << endl;
   }
 
 };
 
 int main(){
   blob_detect B;
+  
+  //read in all the colors we want to detect
+  B.get_colors();
   B.run_detector();
 
   return 0;

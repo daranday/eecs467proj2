@@ -7,11 +7,11 @@
 using namespace std;
 
 double Hmin = 168;
-double Hmax = 200;
+double Hmax = 205;
 double Smin = 15;
-double Smax = 50;
-double Vmin = 70;
-double Vmax = 85;
+double Smax = 55;
+double Vmin = 65;
+double Vmax = 95;
 
 //is HSV for HSV and RGB for RGB, ABC is a placeholder
 struct HSV{
@@ -146,11 +146,12 @@ void RGB_to_HSV( uint8_t R, uint8_t G, uint8_t B, HSV &out ){
 
 struct r_data{
   int area;
-  int xmax, ymax, xmin, ymin;
+  double x, y;
   //center of mass will be intersection of these 4 points
 
   r_data(){
-    area = xmax = ymax = xmin = ymin = 0;
+    area = 0;
+    xmax = ymax = xmin = ymin = 0;
   }
 };
 
@@ -166,7 +167,6 @@ public:
     get_u8x3();
     region_83 = image_u8x3_create( image_83->width, image_83->height );
     region = 1;
-    area = 0;
   }
 
   ~blob_detect(){
@@ -224,8 +224,7 @@ public:
 
   void connect_pixels(int pixel){
     int temp = 0;
-    int xmin = 0, xmax = 0, ymin = 0, ymax = 0, area = 0;
-
+    int x_sum = 0, y_sum = 0, area = 0;
     r_data t;
     stack<int> pixels;
     pixels.push( pixel );
@@ -239,60 +238,58 @@ public:
       //add the region to the popped pixel
       region_83->buf[temp] = region;
 
-      
-      
-
-
       //Find the neighboring pixels
       //NW
       if( good_pixel( temp - image_83->stride - 3 ) ){
 	pixels.push( temp - image_83->stride - 3 );
+	y_sum -=image_83->stride;
+	x_sum -= 3;
       }
       //N
       if( good_pixel( temp - image_83->stride ) ){
 	pixels.push( temp - image_83->stride);
-	if( ymin > temp - image_83->stride )
-	  ymin = temp - image_83->stride;
+	y_sum -=image_83->stride;
       }
       //NE
       if( good_pixel( temp - image_83->stride + 3 ) ){
 	pixels.push( temp - image_83->stride + 3 );
+	y_sum -=image_83->stride;
+	x_sum += 3;
       }
       //E
       if( good_pixel( temp + 3 ) ){
 	pixels.push( temp + 3 );
-	if( xmax < temp + 3 )
-	  xmax = temp+3;
+	x_sum += 3;
       }
       //SE
       if( good_pixel( temp + image_83->stride + 3 ) ){
 	pixels.push( temp + image_83->stride + 3 );
+	y_sum +=image_83->stride;
+	x_sum += 3;
       }
       //S
       if( good_pixel( temp + image_83->stride ) ){
 	pixels.push( temp + image_83->stride );
-	if( ymax < temp + image_83->stride )
-	    ymax = temp + image_83->stride;
+	y_sum +=image_83->stride;
       }
       //SW
       if( good_pixel( temp + image_83->stride - 3 ) ){
 	pixels.push( temp + image_83->stride - 3 );
+	y_sum +=image_83->stride;
+	x_sum -= 3;
       }
       //W
       if( good_pixel( temp - 3 ) ){
 	pixels.push( temp - 3 );
-	if( xmin > temp -3;)
-	  xmin = temp - 3;
+	x_sum -= 3;
       }
       
 	
     }
     
     t.area = area;
-    t.xmin = xmin;
-    t.xmax = xmax;
-    t.ymin = ymin;
-    t.ymax = ymax;
+    t.x = double(x_sum) / double(area);
+    t.y = double(y_sum) / double(area);
     area = 0;
     
     region_data.push_back( t );
@@ -327,3 +324,10 @@ public:
   }
 
 };
+
+int main(){
+  blob_detect B;
+  B.run_detector();
+
+  return 0;
+}
