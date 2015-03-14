@@ -275,9 +275,14 @@ main (int argc, char *argv[])
             move_to(state->cmd_position[0], state->cmd_position[1], 0.13);
         } else if (cmd == "fetch") {
             cout << "Fetching" << endl;
+            // lower claw
             move_to(state->cmd_position[0], state->cmd_position[1], 0.1);
+
+            // straighten shoulder
             state->cmd_angles[5] = -(pi/2);
             move_joints(state->cmd_angles);
+            
+            // raise claw
             move_to(state->cmd_position[0], state->cmd_position[1], 0.13);
         } else if (cmd == "drop") {
             cout << "Dropping" << endl;

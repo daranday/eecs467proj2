@@ -171,6 +171,9 @@ struct state_t {
         if (hsv_state == 0) {
             layered_image = image_u32_copy(image);
         }
+
+        printf("HSV MIN: %g, %g, %g\n", h_min, s_min, v_min);
+        printf("HSV MAX: %g, %g, %g\n", h_max, s_max, v_max);
         
         update_layered_image();
         hsv_state++;
@@ -377,10 +380,10 @@ void get_image_coordinates(double x, double y, int& coord_x, int& coord_y) {
     printf("Coords x = %d, y = %d\n", coord_x, coord_y);
 }
 
-void rgb_to_hsv(uint32_t rgba, double& h, double& s, double& v){
-    double r = ((rgba & 0xFF000000) >> 24) / 255.;
-    double g = ((rgba & 0x00FF0000) >> 16) / 255.;
-    double b = ((rgba & 0x0000FF00) >> 8) / 255.;
+void rgb_to_hsv(uint32_t abgr, double& h, double& s, double& v){
+    double b = ((abgr & 0x00FF0000) >> 16) / 255.;
+    double g = ((abgr & 0x0000FF00) >> 8) / 255.;
+    double r = ((abgr & 0x000000FF) >> 0) / 255.;
     double rgb_max = std::max(r, std::max(g, b));
     double rgb_min = std::min(r, std::min(g, b));
     double delta = rgb_max - rgb_min;
@@ -429,6 +432,8 @@ static int mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_
         // update new hsv range
         uint32_t rgb = state->image->buf[image_y * state->image->stride + image_x];
         rgb_to_hsv(rgb, h, s, v);
+        printf("ARGB: %X\n", rgb);
+        printf("H: %g, S: %g, V: %g\n", h, s, v);
         printf("haha\n");
         state->update_hsv(h, s, v);
         printf("haha\n");
