@@ -18,7 +18,6 @@ class maebot_velocity_command_t
 
         float      linear_velocity;
 
-        /// m/s
         float      angular_velocity;
 
     public:
