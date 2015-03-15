@@ -23,7 +23,7 @@ class coord_convert{
   void b2a_get_factors(double a[], double b[]);
   void board_to_arm( double a[], double b[]);
   void camera_to_board( double b[], double c[]);
-  
+  void camera_to_arm(double a[], double c[]);
 
 };
 

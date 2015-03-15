@@ -5,7 +5,6 @@
 #include <cmath>
 #include <iostream>
 #include <fstream>
-#include "a2_image_to_arm_coord.h"
 using namespace std;
 
 /*things to think about
@@ -70,7 +69,13 @@ void coord_convert::board_to_arm( double a[], double b[]){
   a[2] = matd_get(A, 0, 2);
 }
 
-int main(){
+void coord_convert::camera_to_arm(double a[], double c[]){
+  double b[3];
+  camera_to_board( b, c);
+  camera_to_arm(a, b);
+}
+
+/*int main(){
   coord_convert C;
   double A[9] = { -125.0, -125.0, 125.0,
 		  0.0, 250.0, 0.0,
@@ -95,4 +100,4 @@ int main(){
   
 
   return 0;
-}
+}*/

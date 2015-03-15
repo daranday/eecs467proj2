@@ -63,8 +63,9 @@ struct state_t {
     char **argv;
 
     bool use_cached_bbox_colors;
+    image_u32_t* current_image;
 
-    state_t() : use_cached_bbox_colors(true) {}
+    state_t() : use_cached_bbox_colors(true), current_image(NULL) {}
 } state_obj;
 
 state_t *state = &state_obj;
@@ -104,6 +105,7 @@ mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_t *pos, vx_
 
         printf ("Mouse clicked at coords: [%8.3f, %8.3f]  Ground clicked at coords: [%6.3f, %6.3f]\n",
                 mouse->x, mouse->y, ground[0], ground[1]);
+
     }
 
     // store previous mouse event to see if the user *just* clicked or released
@@ -166,7 +168,10 @@ animate_thread (void *data)
                 printf ("get_frame fail: %d\n", res);
             else {
                 // Handle frame
-                image_u32_t *im = image_convert_u32 (frmd);
+                if (state->current_image != NULL)
+                    image_u32_destroy (im);
+                state->current_image = image_convert_u32 (frmd);
+                image_u32_t *im = state->current_image;
                 if (im != NULL) {
                     vx_object_t *vim = vxo_image_from_u32(im,
                                                           VXO_IMAGE_FLIPY,
@@ -179,7 +184,7 @@ animate_thread (void *data)
                                                    vxo_mat_translate3 (-im->width/2., -im->height/2., 0.),
                                                    vim));
                     vx_buffer_swap (vx_world_get_buffer (state->vxworld, "image"));
-                    image_u32_destroy (im);
+                    // image_u32_destroy (im);
                 }
             }
             fflush (stdout);
@@ -373,7 +378,7 @@ void* start_vx(void* user) {
     return NULL;
 }
 
-void read_bbox_and_colors(vector<double>& bbox, vector<vector<double> >& hsv_ranges) {
+void read_bbox_and_colors(vector<int>& bbox, vector<vector<double> >& hsv_ranges) {
     // use cached values
     if (state->use_cached_bbox_colors) {
         ifstream fin("Bbox_Colors.txt");
@@ -431,13 +436,21 @@ void read_bbox_and_colors(vector<double>& bbox, vector<vector<double> >& hsv_ran
     cout << "\n\n" << endl;
 }
 
+bool is_color(r_data& hsv, vector<double>& color_range) {
+    if (color_range[0] < hsv.H && hsv.H < color_range[1]
+        && color_range[2] < hsv.S && hsv.S < color_range[3]
+        && color_range[4] < hsv.V && hsv.V < color_range[5])
+        return true;
+    return false;
+}
+
 int main (int argc, char *argv[])
 {
     //read bounding box and color hsv ranges
     //hsv_ranges example: [*blue squares color: [h_min, h_max, s_min, s_max, v_min, v_max], 
     //                      *our color [...], 
     //                      *opponent color [...]]
-    vector<double> bbox(4);
+    vector<int> bbox(4);
     vector<vector<double> > hsv_ranges(3, vector<double>(6));
     read_bbox_and_colors(bbox, hsv_ranges);
 
@@ -448,6 +461,43 @@ int main (int argc, char *argv[])
     //start vx
     pthread_t vx_thread;
     pthread_create (&vx_thread, NULL, start_vx, (void*)NULL);
+
+    string our_turn;
+    cin >> turn;
+    if (turn != "our turn") {
+        // sleep 20 seconds
+        usleep(20000000);
+    }
+
+    if (state->current_image != NULL) {
+        B.run( state->current_image);
+        int cnt = 0;
+        double Cmat[9] = { 0, 0, 0,
+                        0, 0, 0,
+                        0, 0, 1};
+        double Bmat[9] = { 250, 0, 250,
+                        0, 0, 250,
+                        1, 1, 1};
+
+
+        for(size_t i = 0, j = 0; i < B.region_data.size(); i++){
+            if(B.region_data[i].area > 100 && is_color(B.region_data[i], hsv_ranges[0])){
+                Cmat[j] = B.region_data[i].x;
+                Cmat[j+3] = B.region_data[i].y;
+                j++;
+            }
+        }
+        B.c2b_get_factors(Bmat, Cmat);
+        for (int i = 0; i < 3; ++i) {
+            string garbage;
+            cin >> garbage;
+            
+        }
+    }
+
+
+
+
 
     // B.run();
     //start command loop
