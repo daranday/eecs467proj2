@@ -12,6 +12,9 @@ using namespace std;
 blob_detect::blob_detect(){
   get_u8x3();
   region_83 = image_u8x3_create( image_83->width, image_83->height );
+  x_mask_min =  y_mask_min =  0;
+  x_mask_max = image_83->width;
+  y_mask_max = image_83->height;
   region = 1;
 }
 
@@ -20,15 +23,35 @@ blob_detect::~blob_detect(){
   image_u8x3_destroy( region_83 );
 }
 
-void blob_detect::run( string name ){
-  file = name;
-  get_colors();
+void blob_detect::run(vector<vector<double>> &input){
+  get_colors(input);
   run_detector();
 }
 
-void blob_detect::get_colors(){
+void blob_detect::get_mask( vector<int> &input ){
+  x_mask_min = input[0];
+  x_mask_max = input[2];
+  y_mask_min = input[1];
+  y_mask_max = input[3];
+
+}
+
+void blob_detect::get_colors( vector<vector<double>> &input){
   thresh color;
-  ifstream input;
+  for(size_t i = 0; i < input.size(); i++){
+    color.Hmin = input[i][0];
+    color.Hmax = input[i][1];
+    color.Smin = input[i][2];
+    color.Smax = input[i][3];
+    color.Vmin = input[i][4];
+    color.Vmax = input[i][5];
+
+  }
+
+  colors.push_back(color);
+  
+  /*
+  ifstream input
   input.open( file );
   while( !input.eof() ){
     input >> color.Hmin >> color.Hmax >> color.Smin >> color.Smax >> color.Vmin >> color.Vmax;
@@ -36,7 +59,7 @@ void blob_detect::get_colors(){
   }
   cout << "colors " << colors.size() << endl;
   cout << colors[1].Hmin << " " << colors[1].Hmax << " " << colors[1].Smin << " " << colors[1].Smax << " " << colors[1].Vmin << " " << colors[1].Vmax << endl;
-
+  */
 }
 
 int blob_detect::which_color( HSV input ){
@@ -103,72 +126,113 @@ bool blob_detect::good_pixel(int pixel, int c_index){
 
 void blob_detect::connect_pixels(int pixel, int c_index){
   int temp = 0;
-  int x_sum = 0, y_sum = 0, area = 0;
+  int sum = pixel, sum_x = (pixel % image_83->stride), area = 0;
   r_data t;
   stack<int> pixels;
   pixels.push( pixel );
-	
-  //loop runs until the stack is empty
+  region_83->buf[pixel] = region;
+  area++;
+  
+  
+
   while( !pixels.empty() ) {
     temp = pixels.top();
     pixels.pop();
-    //update the area of this region
-    area++;
-    //add the region to the popped pixel
-    region_83->buf[temp] = region;
 
     //Find the neighboring pixels
     //NW
     if( good_pixel( temp - image_83->stride - 3, c_index ) ){
       pixels.push( temp - image_83->stride - 3);
-      y_sum -=image_83->stride;
-      x_sum -= 3;
+      region_83->buf[ pixels.top() ] = region;
+      area++;
+
+      sum += pixels.top();
+      sum_x += (pixels.top() % image_83->stride);
+      
     }
     //N
     if( good_pixel( temp - image_83->stride, c_index ) ){
       pixels.push( temp - image_83->stride);
-      y_sum -=image_83->stride;
+      region_83->buf[ pixels.top() ] = region;
+      area++;
+      
+      sum += pixels.top();
+      sum_x += (pixels.top() % image_83->stride);
+      
     }
     //NE
     if( good_pixel( temp - image_83->stride + 3, c_index ) ){
       pixels.push( temp - image_83->stride + 3 );
-      y_sum -=image_83->stride;
-      x_sum += 3;
+      region_83->buf[ pixels.top() ] = region;
+      area++;
+
+      sum += pixels.top();
+      sum_x += (pixels.top() % image_83->stride);
+      
     }
     //E
     if( good_pixel( temp + 3, c_index ) ){
       pixels.push( temp + 3 );
-      x_sum += 3;
+      region_83->buf[ pixels.top() ] = region;
+      area++;
+
+      sum += pixels.top();
+      sum_x += (pixels.top() % image_83->stride);
+      
     }
     //SE
     if( good_pixel( temp + image_83->stride + 3, c_index ) ){
       pixels.push( temp + image_83->stride + 3 );
-      y_sum +=image_83->stride;
-      x_sum += 3;
+      region_83->buf[ pixels.top() ] = region;
+      area++;
+
+      sum += pixels.top();
+      sum_x += (pixels.top() % image_83->stride);
+     
     }
     //S
     if( good_pixel( temp + image_83->stride, c_index ) ){
       pixels.push( temp + image_83->stride );
-      y_sum +=image_83->stride;
+      region_83->buf[ pixels.top() ] = region;
+      area++;
+
+      sum += pixels.top();
+      sum_x += (pixels.top() % image_83->stride);
+      
     }
     //SW
     if( good_pixel( temp + image_83->stride - 3, c_index ) ){
       pixels.push( temp + image_83->stride - 3 );
-      y_sum +=image_83->stride;
-      x_sum -= 3;
+      region_83->buf[ pixels.top() ] = region;
+      area++;
+
+      sum += pixels.top();
+      sum_x += (pixels.top() % image_83->stride);
+      
     }
     //W
     if( good_pixel( temp - 3, c_index ) ){
       pixels.push( temp - 3 );
-      x_sum -= 3;
+      region_83->buf[ pixels.top() ] = region;
+      area++;
+
+      sum += pixels.top();
+      sum_x += (pixels.top() % image_83->stride);
+ 
     }
       
 	
   }
-    
+
+
+  double center = double(sum/3)/double(area);
+  double x_center = double(sum_x)/double(area);
+
+  
+
   t.area = area;
-  t.x = double(x_sum) / double(area);
-  t.y = double(y_sum) / double(area);
+  t.x = x_center / 3.0;
+  t.y = center / double(image_83->stride/3);
   area = 0;
     
   region_data.push_back( t );
@@ -180,8 +244,8 @@ void blob_detect::run_detector(){
   int color_index = -1;
   HSV temp;
   //iterate through all elements of the buffer to find all pixels
-  for(int y = 0; y < image_83->height; y++){
-    for(int x = 0; x < image_83->width; x++){
+  for(int y = y_mask_min; y < y_mask_max; y++){
+    for(int x = x_mask_min; x < x_mask_max; x++){
       //looking for just green now
       index = 3*x + y*image_83->stride;
       if( region_83->buf[ index] == 0 ){
@@ -191,6 +255,9 @@ void blob_detect::run_detector(){
 	  
 	if( color_index != -1){
 	  connect_pixels( index, color_index);
+	  region_data[region_data.size()-1].H = (colors[color_index].Hmin + colors[color_index].Hmax)/2.0;
+	  region_data[region_data.size()-1].S = (colors[color_index].Smin + colors[color_index].Smax)/2.0;
+	  region_data[region_data.size()-1].V = (colors[color_index].Vmin + colors[color_index].Vmax)/2.0;
 	  region+=40;
 	}
 		
@@ -203,12 +270,21 @@ void blob_detect::run_detector(){
   //output for debugging
   image_u8x3_write_pnm( region_83, "pic_out.ppm" );
 
-  for(int i = 1; i < region_data.size(); i++)
+  for(int i = 0; i < region_data.size(); i++)
     cout << "region: " << i << " area: " << region_data[i].area << " x: " << region_data[i].x << " y: " << region_data[i].y << endl;
 }
 
 int main(){
+  vector<vector<double>> color(1);
+  color[0].resize(6);
+  color[0][0] = 160;
+  color[0][1] = 210;
+  color[0][2] = 15;
+  color[0][3] = 60;
+  color[0][4] = 60; 
+  color[0][5] = 100;
+
    blob_detect B;
-   B.run("color_input.txt");
+   B.run(color);
    return 0;
 }

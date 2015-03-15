@@ -1,3 +1,6 @@
+#ifndef __A2_BLOB_DETECTOR__
+#define __A2_BLOB_DETECTOR__
+
 #include "imagesource/image_u32.h"
 #include "imagesource/image_u8x3.h"
 #include <stack>
@@ -162,6 +165,9 @@ void RGB_to_HSV( uint8_t R, uint8_t G, uint8_t B, HSV &out ){
 struct r_data{
   int area;
   double x, y;
+  double H;
+  double S;
+  double V;
   //center of mass will be intersection of these 4 points
 
   r_data(){
@@ -180,10 +186,13 @@ public:
   vector<r_data> region_data;
   vector<thresh> colors;
 
+  int x_mask_min, x_mask_max, y_mask_min, y_mask_max;
+
   blob_detect();
   ~blob_detect();
-  void run( string name );
-  void get_colors();
+  void get_mask( vector<int> &input);
+  void run( vector<vector<double>> &input );
+  void get_colors( vector<vector<double>> &input);
   int which_color( HSV input );
   void get_u8x3();
   bool good_pixel(int pixel, int c_index);
@@ -191,3 +200,5 @@ public:
   void run_detector();
 
 };
+
+#endif
