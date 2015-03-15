@@ -191,10 +191,10 @@ public:
   blob_detect();
   ~blob_detect();
   void get_mask( vector<int> &input);
-  void run( vector<vector<double>> &input );
+  void run(image_u32_t *image_32);
   void get_colors( vector<vector<double>> &input);
   int which_color( HSV input );
-  void get_u8x3();
+  void get_u8x3(image_u32_t *image_32);
   bool good_pixel(int pixel, int c_index);
   void connect_pixels(int pixel, int c_index);
   void run_detector();

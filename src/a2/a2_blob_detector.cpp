@@ -10,11 +10,6 @@
 using namespace std;
 
 blob_detect::blob_detect(){
-  get_u8x3();
-  region_83 = image_u8x3_create( image_83->width, image_83->height );
-  x_mask_min =  y_mask_min =  0;
-  x_mask_max = image_83->width;
-  y_mask_max = image_83->height;
   region = 1;
 }
 
@@ -23,8 +18,12 @@ blob_detect::~blob_detect(){
   image_u8x3_destroy( region_83 );
 }
 
-void blob_detect::run(vector<vector<double>> &input){
-  get_colors(input);
+void blob_detect::run(image_u32_t *image_32){
+  get_u8x3(image_32);
+  region_83 = image_u8x3_create( image_83->width, image_83->height );
+  x_mask_min =  y_mask_min =  0;
+  x_mask_max = image_83->width;
+  y_mask_max = image_83->height;
   run_detector();
 }
 
@@ -75,11 +74,8 @@ int blob_detect::which_color( HSV input ){
 }
 
 //read in some image and convert it to u8x3 format
-void blob_detect::get_u8x3(){
-  image_u32 *image_32;
+void blob_detect::get_u8x3(image_u32_t *image_32){
   uint8_t R,G,B;
-
-  image_32 = image_u32_create_from_pnm( "pic.ppm" );
   image_83 = image_u8x3_create( image_32->width, image_32->height );
 
   //convert u32 image to a u8x3
@@ -270,21 +266,21 @@ void blob_detect::run_detector(){
   //output for debugging
   image_u8x3_write_pnm( region_83, "pic_out.ppm" );
 
-  for(int i = 0; i < region_data.size(); i++)
+  for(size_t i = 0; i < region_data.size(); i++)
     cout << "region: " << i << " area: " << region_data[i].area << " x: " << region_data[i].x << " y: " << region_data[i].y << endl;
 }
 
-int main(){
-  vector<vector<double>> color(1);
-  color[0].resize(6);
-  color[0][0] = 160;
-  color[0][1] = 210;
-  color[0][2] = 15;
-  color[0][3] = 60;
-  color[0][4] = 60; 
-  color[0][5] = 100;
+// int _main(){
+//   // vector<vector<double>> color(1);
+//   // color[0].resize(6);
+//   // color[0][0] = 160;
+//   // color[0][1] = 210;
+//   // color[0][2] = 15;
+//   // color[0][3] = 60;
+//   // color[0][4] = 60; 
+//   // color[0][5] = 100;
 
-   blob_detect B;
-   B.run(color);
-   return 0;
-}
+//   //  blob_detect B;
+//   //  B.run();
+//    return 0;
+// }

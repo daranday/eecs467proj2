@@ -30,8 +30,9 @@
 #include "apps/eecs467_util.h"    // This is where a lot of the internals live
 
 // a2 sources
-#include "a2_mask.h"
-#include "a2_color_picker.h"
+// #include "a2_mask.h"
+// #include "a2_color_picker.h"
+#include "a2_blob_detector.h"
 
 using namespace std;
 
@@ -430,8 +431,7 @@ void read_bbox_and_colors(vector<double>& bbox, vector<vector<double> >& hsv_ran
     cout << "\n\n" << endl;
 }
 
-int
-main (int argc, char *argv[])
+int main (int argc, char *argv[])
 {
     //read bounding box and color hsv ranges
     //hsv_ranges example: [*blue squares color: [h_min, h_max, s_min, s_max, v_min, v_max], 
@@ -441,12 +441,18 @@ main (int argc, char *argv[])
     vector<vector<double> > hsv_ranges(3, vector<double>(6));
     read_bbox_and_colors(bbox, hsv_ranges);
 
+    blob_detect B;
+    B.get_mask(bbox);
+    B.get_colors(hsv_ranges);
+
     //start vx
     pthread_t vx_thread;
     pthread_create (&vx_thread, NULL, start_vx, (void*)NULL);
 
+    // B.run();
     //start command loop
     
+
 
     pthread_join (vx_thread, NULL);
     return 0;
