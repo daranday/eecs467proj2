@@ -1,3 +1,5 @@
+#include "a2_mask.h"
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -134,43 +136,43 @@ image_u32_t* take_a_pic (char* output_image_path)
         zarray_get(urls, i, &url);
         printf("  %3d: %s\n", i, url);
     }
-    printf("haha\n");
+    // printf("haha\n");
     if (zarray_size(urls) == 0) {
         printf("No cameras found.\n");
         exit(0);
     }
-    printf("haha\n");
+    // printf("haha\n");
     // Choose first image source
     zarray_get(urls, 0, &state->url);
-    printf("haha\n");
+    // printf("haha\n");
 
 
     pthread_mutex_init(&state->mutex, NULL);
 
     //////////////////////////////////////////////////////////
     state->isrc = image_source_open(state->url);
-    printf("haha\n");
+    // printf("haha\n");
     if (state->isrc == NULL) {
         printf("Unable to open device %s\n", state->url);
         exit(-1);
     }
-    printf("haha\n");
+    // printf("haha\n");
 
     image_source_t *isrc = state->isrc;
-    printf("haha\n");
+    // printf("haha\n");
 
     if (isrc->start(isrc))
         exit(-1);
-    printf("haha\n");
+    // printf("haha\n");
 
     state->fidx = isrc->get_current_format(isrc);
 
-    printf("Image source formats:\n");
-    for (int i = 0; i < isrc->num_formats(isrc); i++) {
-        image_source_format_t ifmt;
-        isrc->get_format(isrc, i, &ifmt);
-        printf("\t%d\t%4d x %4d (%s)\n", i, ifmt.width, ifmt.height, ifmt.format);
-    }
+    // printf("Image source formats:\n");
+    // for (int i = 0; i < isrc->num_formats(isrc); i++) {
+    //     image_source_format_t ifmt;
+    //     isrc->get_format(isrc, i, &ifmt);
+    //     printf("\t%d\t%4d x %4d (%s)\n", i, ifmt.width, ifmt.height, ifmt.format);
+    // }
 
 
     // // ask which resolution to take picture in
@@ -199,15 +201,15 @@ image_u32_t* take_a_pic (char* output_image_path)
         // break;
     }
 
-    printf("Image source features:\n");
-    for (int i = 0; i < isrc->num_features(isrc); i++) {
-        const char *feature_name = isrc->get_feature_name(isrc, i);
-        char *feature_type = isrc->get_feature_type(isrc, i);
-        double v = isrc->get_feature_value(isrc, i);
+    // printf("Image source features:\n");
+    // for (int i = 0; i < isrc->num_features(isrc); i++) {
+    //     const char *feature_name = isrc->get_feature_name(isrc, i);
+    //     char *feature_type = isrc->get_feature_type(isrc, i);
+    //     double v = isrc->get_feature_value(isrc, i);
 
-        printf("\t%-20s %10f     %s\n", feature_name, v, feature_type);
-        free(feature_type);
-    }
+    //     printf("\t%-20s %10f     %s\n", feature_name, v, feature_type);
+    //     free(feature_type);
+    // }
        
     //variables to store the pic 
     image_source_data_t isdata;
@@ -264,8 +266,8 @@ static void my_param_changed (parameter_listener_t *pl, parameter_gui_t *pg, con
             return;
         }
         ofstream fout("Mask.txt");
-        fout << state->p1_x << ", " << state->p1_y << endl;
-        fout << state->p2_x << ", " << state->p2_y << endl;
+        fout << state->p1_x << " " << state->p1_y << endl;
+        fout << state->p2_x << " " << state->p2_y << endl;
         fout.close();
         printf("File saved to Mask.txt\n");
     } 

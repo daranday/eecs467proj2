@@ -1,3 +1,5 @@
+#include "a2_color_picker.h"
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -39,7 +41,7 @@ static int touch_event (vx_event_handler_t *vh, vx_layer_t *vl, vx_camera_pos_t 
 void show_image(image_u32_t* im);
 void rgb_to_hsv(uint32_t rgba, double& h, double& s, double& v);
 
-struct state_t {
+struct color_state_t {
     // take a pic required
     char     *url; // image_source url
     image_source_t *isrc;
@@ -61,7 +63,7 @@ struct state_t {
     image_u32_t* image;
     image_u32_t* layered_image;
     
-    // color picker state
+    // color picker color_state
     double h_min_last;
     double s_min_last;
     double v_min_last;
@@ -79,7 +81,7 @@ struct state_t {
 
 
 
-    // selection state
+    // selection color_state
     int selection_state;
 
     // vx stuff
@@ -93,7 +95,7 @@ struct state_t {
 
     // for accessing the arrays
     // pthread_mutex_t mutex;
-    state_t() {
+    color_state_t() {
         vxworld = vx_world_create ();
         vxeh = (vx_event_handler_t*)calloc (1, sizeof(*vxeh));
         vxeh->key_event = key_event;
@@ -119,7 +121,7 @@ struct state_t {
     }
 
     //clean up
-    ~state_t() {
+    ~color_state_t() {
         if (vxeh)
             free (vxeh);
 
@@ -203,106 +205,105 @@ struct state_t {
         }
         printf("Undid last color selection\n");
     }
-} state_obj;
+} color_state_obj;
 
-state_t *state = &state_obj;
+color_state_t *color_state = &color_state_obj;
 
 // takes a picture and return it
 // can also outputs the image to a specified path, filename always is: BeforeMask.ppm
 // if don't want to, leave the path empty
 image_u32_t* take_a_pic (char* output_image_path)
 {
-    //instantiate a state variable
-    // state_t *state = &state_obj;
+    // color_state_t *color_state = &state_obj;
 
     //get camera addresses
     zarray_t *urls = image_source_enumerate();
 
-    printf("Cameras:\n");
-    for (int i = 0; i < zarray_size(urls); i++) {
-        char *url;
-        zarray_get(urls, i, &url);
-        printf("  %3d: %s\n", i, url);
-    }
-    printf("haha\n");
+    // printf("Cameras:\n");
+    // for (int i = 0; i < zarray_size(urls); i++) {
+    //     char *url;
+    //     zarray_get(urls, i, &url);
+    //     printf("  %3d: %s\n", i, url);
+    // }
+    // printf("haha\n");
     if (zarray_size(urls) == 0) {
         printf("No cameras found.\n");
         exit(0);
     }
-    printf("haha\n");
+    // printf("haha\n");
     // Choose first image source
-    zarray_get(urls, 0, &state->url);
-    printf("haha\n");
+    zarray_get(urls, 0, &color_state->url);
+    // printf("haha\n");
 
 
-    pthread_mutex_init(&state->mutex, NULL);
+    pthread_mutex_init(&color_state->mutex, NULL);
 
     //////////////////////////////////////////////////////////
-    state->isrc = image_source_open(state->url);
-    printf("haha\n");
-    if (state->isrc == NULL) {
-        printf("Unable to open device %s\n", state->url);
+    color_state->isrc = image_source_open(color_state->url);
+    // printf("haha\n");
+    if (color_state->isrc == NULL) {
+        printf("Unable to open device %s\n", color_state->url);
         exit(-1);
     }
-    printf("haha\n");
+    // printf("haha\n");
 
-    image_source_t *isrc = state->isrc;
-    printf("haha\n");
+    image_source_t *isrc = color_state->isrc;
+    // printf("haha\n");
 
     if (isrc->start(isrc))
         exit(-1);
-    printf("haha\n");
+    // printf("haha\n");
 
-    state->fidx = isrc->get_current_format(isrc);
+    color_state->fidx = isrc->get_current_format(isrc);
 
-    printf("Image source formats:\n");
-    for (int i = 0; i < isrc->num_formats(isrc); i++) {
-        image_source_format_t ifmt;
-        isrc->get_format(isrc, i, &ifmt);
-        printf("\t%d\t%4d x %4d (%s)\n", i, ifmt.width, ifmt.height, ifmt.format);
-    }
+    // printf("Image source formats:\n");
+    // for (int i = 0; i < isrc->num_formats(isrc); i++) {
+    //     image_source_format_t ifmt;
+    //     isrc->get_format(isrc, i, &ifmt);
+    //     printf("\t%d\t%4d x %4d (%s)\n", i, ifmt.width, ifmt.height, ifmt.format);
+    // }
 
 
     // // ask which resolution to take picture in
     // while (true) {
     //     printf("Please select graphics: ");
     //     isrc->stop(isrc);
-    //     scanf("%d", &(state->fidx));
+    //     scanf("%d", &(color_state->fidx));
     //     if (isrc->start(isrc))
     //         exit(-1);
-    //     if (state->fidx >= 0 && state->fidx < isrc->num_formats(isrc)) {
+    //     if (color_state->fidx >= 0 && color_state->fidx < isrc->num_formats(isrc)) {
     //         image_source_format_t ifmt;
-    //         isrc->get_format(isrc, state->fidx, &ifmt);
-    //         state->fmt_x = ifmt.width;
-    //         state->fmt_y = ifmt.height;
-    //         isrc->set_format (isrc, state->fidx);
+    //         isrc->get_format(isrc, color_state->fidx, &ifmt);
+    //         color_state->fmt_x = ifmt.width;
+    //         color_state->fmt_y = ifmt.height;
+    //         isrc->set_format (isrc, color_state->fidx);
     //         break;
     //     }
     // }
 
-    if (state->fidx >= 0 && state->fidx < isrc->num_formats(isrc)) {
+    if (color_state->fidx >= 0 && color_state->fidx < isrc->num_formats(isrc)) {
         image_source_format_t ifmt;
-        isrc->get_format(isrc, state->fidx, &ifmt);
-        state->fmt_x = ifmt.width;
-        state->fmt_y = ifmt.height;
-        // isrc->set_format (isrc, state->fidx);
+        isrc->get_format(isrc, color_state->fidx, &ifmt);
+        color_state->fmt_x = ifmt.width;
+        color_state->fmt_y = ifmt.height;
+        // isrc->set_format (isrc, color_state->fidx);
         // break;
     }
 
-    printf("Image source features:\n");
-    for (int i = 0; i < isrc->num_features(isrc); i++) {
-        const char *feature_name = isrc->get_feature_name(isrc, i);
-        char *feature_type = isrc->get_feature_type(isrc, i);
-        double v = isrc->get_feature_value(isrc, i);
+    // printf("Image source features:\n");
+    // for (int i = 0; i < isrc->num_features(isrc); i++) {
+    //     const char *feature_name = isrc->get_feature_name(isrc, i);
+    //     char *feature_type = isrc->get_feature_type(isrc, i);
+    //     double v = isrc->get_feature_value(isrc, i);
 
-        printf("\t%-20s %10f     %s\n", feature_name, v, feature_type);
-        free(feature_type);
-    }
+    //     printf("\t%-20s %10f     %s\n", feature_name, v, feature_type);
+    //     free(feature_type);
+    // }
        
     //variables to store the pic 
     image_source_data_t isdata;
 
-    pthread_mutex_lock(&state->mutex);
+    pthread_mutex_lock(&color_state->mutex);
     //take pic
     int res;
     while((res = isrc->get_frame(isrc, &isdata)) != 0);
@@ -320,7 +321,7 @@ image_u32_t* take_a_pic (char* output_image_path)
     isrc->release_frame(isrc, &isdata);
     isrc->stop(isrc);
     
-    pthread_mutex_unlock(&state->mutex);
+    pthread_mutex_unlock(&color_state->mutex);
 
     return img;
 }
@@ -329,7 +330,7 @@ image_u32_t* take_a_pic (char* output_image_path)
 // This function is handed to the parameter gui (via a parameter listener)
 // and handles events coming from the parameter gui. The parameter listener
 // also holds a void* pointer to "impl", which can point to a struct holding
-// state, etc if need be.
+// color_state, etc if need be.
 static void my_param_changed (parameter_listener_t *pl, parameter_gui_t *pg, const char *name)
 {
     if (0==strcmp ("sl1", name))
@@ -346,37 +347,37 @@ static void my_param_changed (parameter_listener_t *pl, parameter_gui_t *pg, con
     if (0==strcmp("button_clear", name)) {
 
     // } else if (0==strcmp("button_capture", name)) {
-    //     state->image = take_a_pic("");
+    //     color_state->image = take_a_pic("");
 
     } else if (0==strcmp("button_save", name)) {
-        if (state->hsv_state == 0) {
+        if (color_state->hsv_state == 0) {
             printf("Error: No hsv ranges to save\n");
             return;
         }
         ofstream fout("HsvRange.txt");
-        fout << state->h_min << " " << state->h_max << " "
-             << state->s_min << " " << state->s_max << " "
-             << state->v_min << " " << state->v_max << endl;
+        fout << color_state->h_min << " " << color_state->h_max << " "
+             << color_state->s_min << " " << color_state->s_max << " "
+             << color_state->v_min << " " << color_state->v_max << endl;
         fout.close();
         printf("File saved to HsvRange.txt\n");
     } 
 
     //for any button click, clear the selection
     if (0==strncmp("button", name, 6)) {
-        state->hsv_state = 0;
-        state->h_min = 1; state->s_min = 1; state->v_min = 1; 
-        state->h_max = 0; state->s_max = 0; state->v_max = 0; 
+        color_state->hsv_state = 0;
+        color_state->h_min = 1; color_state->s_min = 1; color_state->v_min = 1; 
+        color_state->h_max = 0; color_state->s_max = 0; color_state->v_max = 0; 
 
-        image_u32_destroy (state->layered_image);
-        state->layered_image = NULL;
-        show_image(state->image);
+        image_u32_destroy (color_state->layered_image);
+        color_state->layered_image = NULL;
+        show_image(color_state->image);
     }
     
 }
 
 void get_image_coordinates(double x, double y, int& coord_x, int& coord_y) {
-    coord_x = round((x + 1) * state->fmt_x / 2. + 0.5);
-    coord_y = state->fmt_y - round((y + state->fmt_y / (state->fmt_x * 1.)) * state->fmt_x / 2. + 0.5);
+    coord_x = round((x + 1) * color_state->fmt_x / 2. + 0.5);
+    coord_y = color_state->fmt_y - round((y + color_state->fmt_y / (color_state->fmt_x * 1.)) * color_state->fmt_x / 2. + 0.5);
     printf("Coords x = %d, y = %d\n", coord_x, coord_y);
 }
 
@@ -404,13 +405,13 @@ void rgb_to_hsv(uint32_t abgr, double& h, double& s, double& v){
 
 static int mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_t *pos, vx_mouse_event_t *mouse)
 {
-    // state_t *state = (state_t*)(vxeh->impl);
+    // color_state_t *color_state = (color_state_t*)(vxeh->impl);
 
     // vx_camera_pos_t contains camera location, field of view, etc
     // vx_mouse_event_t contains scroll, x/y, and button click events
 
     if ((mouse->button_mask & VX_BUTTON1_MASK) &&
-        !(state->last_mouse_event.button_mask & VX_BUTTON1_MASK)) {
+        !(color_state->last_mouse_event.button_mask & VX_BUTTON1_MASK)) {
 
         vx_ray3_t ray;
         vx_camera_pos_compute_ray (pos, mouse->x, mouse->y, &ray);
@@ -422,7 +423,7 @@ static int mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_
 
         int image_x, image_y;
         get_image_coordinates(ground[0], ground[1], image_x, image_y);
-        if (image_x < 0 || image_x > state->fmt_x || image_y < 0 || image_y > state->fmt_y) {
+        if (image_x < 0 || image_x > color_state->fmt_x || image_y < 0 || image_y > color_state->fmt_y) {
             printf("Error: mouse click outside of image\n");
             return 1;
         }
@@ -430,41 +431,41 @@ static int mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_
         double h, s, v;
 
         // update new hsv range
-        uint32_t rgb = state->image->buf[image_y * state->image->stride + image_x];
+        uint32_t rgb = color_state->image->buf[image_y * color_state->image->stride + image_x];
         rgb_to_hsv(rgb, h, s, v);
         printf("ARGB: %X\n", rgb);
         printf("H: %g, S: %g, V: %g\n", h, s, v);
-        printf("haha\n");
-        state->update_hsv(h, s, v);
-        printf("haha\n");
+        // printf("haha\n");
+        color_state->update_hsv(h, s, v);
+        // printf("haha\n");
     }
 
     // store previous mouse event to see if the user *just* clicked or released
-    state->last_mouse_event = *mouse;
+    color_state->last_mouse_event = *mouse;
 
     return 0;
 }
 
 static int key_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_key_event_t *key)
 {
-    pthread_mutex_lock(&state->cmd_mutex);
+    pthread_mutex_lock(&color_state->cmd_mutex);
     if (key->released) {
         if (key->key_code == 's' || key->key_code == 'S') {
-            if (state->hsv_state == 0) {
+            if (color_state->hsv_state == 0) {
                 printf("Error: No hsv ranges to save\n");
                 return 1;
             }
             ofstream fout("HsvRange.txt");
-            fout << state->h_min << " " << state->h_max << " "
-                 << state->s_min << " " << state->s_max << " "
-                 << state->v_min << " " << state->v_max << endl;
+            fout << color_state->h_min << " " << color_state->h_max << " "
+                 << color_state->s_min << " " << color_state->s_max << " "
+                 << color_state->v_min << " " << color_state->v_max << endl;
             fout.close();
             printf("File saved to HsvRange.txt\n");
         } else if (key->key_code == VX_KEY_DEL) {
-            state->undo_hsv();
+            color_state->undo_hsv();
         }
     }
-    pthread_mutex_unlock(&state->cmd_mutex);
+    pthread_mutex_unlock(&color_state->cmd_mutex);
 
     return 0;
 }
@@ -481,74 +482,74 @@ void show_image(image_u32_t* im) {
 
     // render the image centered at the origin and at a normalized scale of +/-1 unit in x-dir
     const double scale = 2./im->width;
-    vx_buffer_add_back (vx_world_get_buffer (state->vxworld, "image"),
+    vx_buffer_add_back (vx_world_get_buffer (color_state->vxworld, "image"),
                         vxo_chain (vxo_mat_scale3 (scale, scale, 1.0),
                                    vxo_mat_translate3 (-im->width/2., -im->height/2., 0.),
                                    vim));
-    vx_buffer_swap (vx_world_get_buffer (state->vxworld, "image"));
+    vx_buffer_swap (vx_world_get_buffer (color_state->vxworld, "image"));
 }
 
 void *animate_thread (void *data)
 {
-    image_u32_t *im = state->image;
+    image_u32_t *im = color_state->image;
     if (im != NULL) {
-        show_image(state->image);
+        show_image(color_state->image);
     }
     return NULL;
 }
 
 void init_getopt(int argc, char** argv) {
-    // state_t *state = &state_obj;
+    // color_state_t *color_state = &state_obj;
     // Parse arguments from the command line, showing the help
     // screen if required
-    state->gopt = getopt_create ();
-    getopt_add_bool   (state->gopt,  'h', "help", 0, "Show help");
-    getopt_add_string (state->gopt, 'f', "file", "", "Image file to be masked");
+    color_state->gopt = getopt_create ();
+    getopt_add_bool   (color_state->gopt,  'h', "help", 0, "Show help");
+    getopt_add_string (color_state->gopt, 'f', "file", "", "Image file to be masked");
 
-    if (!getopt_parse (state->gopt, argc, argv, 1) || getopt_get_bool (state->gopt, "help")) {
+    if (!getopt_parse (color_state->gopt, argc, argv, 1) || getopt_get_bool (color_state->gopt, "help")) {
         printf ("Usage: %s [--file=FILE_PATH] or an image will be cropped from your camera.\n\n", argv[0]);
-        getopt_do_usage (state->gopt);
+        getopt_do_usage (color_state->gopt);
         exit (EXIT_FAILURE);
     }
 }
 
 void run_graphics(int argc, char** argv) {
-    // state_t *state = &state_obj;
+    // color_state_t *color_state = &state_obj;
     eecs467_init (argc, argv);
 
     // Initialize this application as a remote display source. This allows
     // you to use remote displays to render your visualization. Also starts up
     // the animation thread, in which a render loop is run to update your display.
-    vx_remote_display_source_t *cxn = vx_remote_display_source_create (&state->vxapp);
+    vx_remote_display_source_t *cxn = vx_remote_display_source_create (&color_state->vxapp);
 
     // Initialize a parameter gui
-    state->pg = pg_create ();
-    // pg_add_double_slider (state->pg, "sl1", "Slider 1", 0, 100, 50);
-    // pg_add_int_slider    (state->pg, "sl2", "Slider 2", 0, 100, 25);
-    // pg_add_check_boxes (state->pg,
+    color_state->pg = pg_create ();
+    // pg_add_double_slider (color_state->pg, "sl1", "Slider 1", 0, 100, 50);
+    // pg_add_int_slider    (color_state->pg, "sl2", "Slider 2", 0, 100, 25);
+    // pg_add_check_boxes (color_state->pg,
     //                     "cb1", "Check Box 1", 0,
     //                     "cb2", "Check Box 2", 1,
     //                     NULL);
-    pg_add_buttons (state->pg,
+    pg_add_buttons (color_state->pg,
                     // "button_capture", "Capture",
                     "button_clear", "Clear Selection",
                     "button_save", "Save",
                     NULL);
 
     parameter_listener_t *my_listener = (parameter_listener_t*)calloc(1, sizeof(*my_listener));
-    my_listener->impl = state;
+    my_listener->impl = color_state;
     my_listener->param_changed = my_param_changed;
-    pg_add_listener (state->pg, my_listener);
+    pg_add_listener (color_state->pg, my_listener);
 
     // Launch our worker threads
-    pthread_create(&state->animate_thread, NULL, animate_thread, state);
+    pthread_create(&color_state->animate_thread, NULL, animate_thread, color_state);
 
     // This is the main loop
-    eecs467_gui_run (&state->vxapp, state->pg, state->fmt_x, state->fmt_y);
+    eecs467_gui_run (&color_state->vxapp, color_state->pg, color_state->fmt_x, color_state->fmt_y);
 
     // Quit when GTK closes
-    state->running = 0;
-    pthread_join (state->animate_thread, NULL);
+    color_state->running = 0;
+    pthread_join (color_state->animate_thread, NULL);
 
     // Cleanup
     free (my_listener);
@@ -556,18 +557,17 @@ void run_graphics(int argc, char** argv) {
     vx_global_destroy ();
 }
 
-
 int main(int argc, char** argv) {
     char output_path[100] = "./";
 
     init_getopt(argc, argv);
     
-    if (strcmp(getopt_get_string (state->gopt, "file"), "") == 0)
-        state->image = take_a_pic(output_path);
+    if (strcmp(getopt_get_string (color_state->gopt, "file"), "") == 0)
+        color_state->image = take_a_pic(output_path);
     else {
-        state->image = image_u32_create_from_pnm(getopt_get_string(state->gopt, "file"));
-        state->fmt_x = state->image->width;
-        state->fmt_y = state->image->height;
+        color_state->image = image_u32_create_from_pnm(getopt_get_string(color_state->gopt, "file"));
+        color_state->fmt_x = color_state->image->width;
+        color_state->fmt_y = color_state->image->height;
     }
 
     run_graphics(argc, argv);

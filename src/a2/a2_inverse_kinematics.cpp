@@ -78,83 +78,19 @@ status_handler (const lcm_recv_buf_t *rbuf,
 void *
 status_loop (void *data)
 {
+    const int hz = 15;
     dynamixel_status_list_t_subscribe (state->lcm,
                                        state->status_channel,
                                        status_handler,
                                        state);
-    // cout << "I'm in status loop" << endl;
-
-    const int hz = 15;
     while (state->running) {
         // Set up the LCM file descriptor for waiting. This lets us monitor it
         // until something is "ready" to happen. In this case, we are ready to
         // receive a message.
         int status = lcm_handle_timeout (state->lcm, 1000/hz);
-        // cout << "I'm in status loop" << endl;
         if (status <= 0)
             continue;
-
-        // LCM has events ready to be processed
     }
-
-    return NULL;
-}
-
-void *
-command_loop (void *user)
-{
-    const int hz = 30;
-
-    dynamixel_command_list_t cmds;
-    cmds.len = NUM_SERVOS;
-    cmds.commands = (dynamixel_command_t*)calloc (NUM_SERVOS, sizeof(dynamixel_command_t));
-	float pi = 3.1415;
-    for (int id = 0; id < NUM_SERVOS; id++) {
-            cmds.commands[id].utime = utime_now ();
-            cmds.commands[id].position_radians = 0.0;
-            cmds.commands[id].speed = 0.05;
-            cmds.commands[id].max_torque = 0.35;
-    		dynamixel_command_list_t_publish (state->lcm, state->command_channel, &cmds);
-        	usleep (1000000/hz);
-     }
-
-    while (1) {
-        // Send LCM commands to arm. Normally, you would update positions, etc,
-        // but here, we will just home the arm.
-        for (int id = 0; id < NUM_SERVOS; id++) {
-            if (getopt_get_bool (state->gopt, "idle")) {
-                cmds.commands[id].utime = utime_now ();
-                cmds.commands[id].position_radians = 0.0;
-                cmds.commands[id].speed = 0.0;
-                cmds.commands[id].max_torque = 0.5;
-        		dynamixel_command_list_t_publish (state->lcm, state->command_channel, &cmds);
-            }
-            else {
-                //wave servo back and forth once 
-				cmds.commands[id].utime = utime_now ();
-                cmds.commands[id].position_radians = 0.0;
-                cmds.commands[id].speed = 0.05;
-                cmds.commands[id].max_torque = 0.5;
-        		dynamixel_command_list_t_publish (state->lcm, state->command_channel, &cmds);
-        		usleep (5*1000000/hz);
-                
-				cmds.commands[id].position_radians = pi/12.0;
-				cmds.commands[id].utime = utime_now ();
-        		dynamixel_command_list_t_publish (state->lcm, state->command_channel, &cmds);
-        		usleep (100*1000000/hz);
-				
-				cmds.commands[id].position_radians = 0.0;
-				cmds.commands[id].utime = utime_now ();
-        		dynamixel_command_list_t_publish (state->lcm, state->command_channel, &cmds);
-        		usleep (5*1000000/hz);
-            }
-        }
-       // dynamixel_command_list_t_publish (state->lcm, state->command_channel, &cmds);
-
-        usleep (500000/hz);
-    }
-
-    free (cmds.commands);
 
     return NULL;
 }

@@ -29,6 +29,10 @@
 
 #include "apps/eecs467_util.h"    // This is where a lot of the internals live
 
+// a2 sources
+#include "a2_mask.h"
+#include "a2_color_picker.h"
+
 using namespace std;
 
 // It's good form for every application to keep its state in a struct.
@@ -56,6 +60,10 @@ struct state_t {
     pthread_mutex_t mutex;
     int argc;
     char **argv;
+
+    bool use_cached_bbox_colors;
+
+    state_t() : use_cached_bbox_colors(true) {}
 } state_obj;
 
 state_t *state = &state_obj;
@@ -265,15 +273,13 @@ state_destroy (state_t *state)
 
     if (state->pg)
         pg_destroy (state->pg);
-
-    free (state);
 }
 
 // This is intended to give you a starting point to work with for any program
 // requiring a GUI. This handles all of the GTK and vx setup, allowing you to
 // fill in the functionality with your own code.
 
-void* init(void* user) {
+void* start_vx(void* user) {
     int argc = state->argc;
     char **argv = state->argv;
 
@@ -366,33 +372,82 @@ void* init(void* user) {
     return NULL;
 }
 
+void read_bbox_and_colors(vector<double>& bbox, vector<vector<double> >& hsv_ranges) {
+    // use cached values
+    if (state->use_cached_bbox_colors) {
+        ifstream fin("Bbox_Colors.txt");
+        for (int i = 0; i < 4; ++i) {
+            fin >> bbox[i];
+        }
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < 3; ++j) {
+                fin >> hsv_ranges[i][j * 2] >> hsv_ranges[i][j * 2 + 1];
+            }
+        }
+        fin.close();
+    } else {
+        // save these values to cache
+        ofstream fout("Bbox_Colors.txt");
+
+        //read mask
+        system("./bin/a2_mask");
+        ifstream fmask("Mask.txt");
+        for (int i = 0; i < 4; ++i) {
+            fmask >> bbox[i];
+            fout << bbox[i] << " ";
+        }
+        fmask.close();
+        cout << endl;
+        fout << endl;
+
+        // read colors for blue corner squares, our color, their color
+        for (int i = 0; i < 3; ++i) {
+            system("./bin/a2_color_picker");
+            ifstream fhsv("HsvRange.txt");
+            for (int j = 0; j < 3; ++j) {
+                fhsv >> hsv_ranges[i][j * 2] >> hsv_ranges[i][j * 2 + 1];
+                fout << hsv_ranges[i][j * 2] << " " << hsv_ranges[i][j * 2 + 1] << " ";
+            }
+            fout << endl;
+            fhsv.close();
+        }
+        fout.close();
+    }
+
+    //output input values
+    cout << "\n\nBBox Coordinates:" << endl;
+    for (int i = 0; i < 4; ++i)
+        cout << bbox[i] << " ";
+    cout << "\nHSV colors:" << endl;
+    vector<string> color_types = {"Blue Corner Squares", "Our Color", "Opponent Color"};
+    for (int i = 0; i < 3; ++i) {
+        cout << color_types[i] << ": " << endl;
+        for (int j = 0; j < 3; ++j) {
+            cout << hsv_ranges[i][j * 2] << " " << hsv_ranges[i][j * 2 + 1] << " ";
+        }
+        cout << endl;
+    }
+    cout << "\n\n" << endl;
+}
+
 int
 main (int argc, char *argv[])
 {
-    pthread_t init_thread;
-    pthread_create (&init_thread, NULL, init, (void*)NULL);
-
-    ifstream fmask("Mask.txt");
-    ifstream fhsv("HsvRange.txt");
-
+    //read bounding box and color hsv ranges
+    //hsv_ranges example: [*blue squares color: [h_min, h_max, s_min, s_max, v_min, v_max], 
+    //                      *our color [...], 
+    //                      *opponent color [...]]
     vector<double> bbox(4);
-    cout << "BBox coordinates:" << endl;
-    for (int i = 0; i < 4; ++i) {
-        fmask >> bbox[i];
-        cout << bbox[i] << ", ";
-    }
+    vector<vector<double> > hsv_ranges(3, vector<double>(6));
+    read_bbox_and_colors(bbox, hsv_ranges);
 
-    cout << endl;
+    //start vx
+    pthread_t vx_thread;
+    pthread_create (&vx_thread, NULL, start_vx, (void*)NULL);
+
+    //start command loop
     
-    vector<double> hsv_min(3);
-    vector<double> hsv_max(3);
-    cout << "HSV values:" << endl;
-    for (int i = 0; i < 3; ++i) {
-        fhsv >> hsv_min[i] >> hsv_max[i];
-        cout << hsv_min[i] << ", " << hsv_max[i] << endl;
-    }
 
-
-
-    pthread_join (init_thread, NULL);
+    pthread_join (vx_thread, NULL);
+    return 0;
 }
