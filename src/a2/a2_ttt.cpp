@@ -30,9 +30,10 @@
 #include "apps/eecs467_util.h"    // This is where a lot of the internals live
 
 // a2 sources
-// #include "a2_mask.h"
-// #include "a2_color_picker.h"
 #include "a2_blob_detector.h"
+#include "a2_inverse_kinematics.h"
+#include "a2_image_to_arm_coord.h"
+
 
 using namespace std;
 
@@ -63,9 +64,25 @@ struct state_t {
     char **argv;
 
     bool use_cached_bbox_colors;
+    bool use_cached_calibration;
     image_u32_t* current_image;
 
-    state_t() : use_cached_bbox_colors(true), current_image(NULL) {}
+    coord_convert converter;
+    bool converter_initialized;
+
+    int balls_placed;
+
+    double origin_x;
+    double origin_y;
+    double interval_x;
+    double interval_y;
+
+    state_t() : current_image(NULL), converter_initialized(false), balls_placed(0) {
+        use_cached_bbox_colors = (ifstream("Bbox_Colors.txt")) ? true : false;
+        use_cached_calibration = (ifstream("ConversionMatrices.txt")) ? true : false;
+        interval_x = 0.065; interval_y = 0.065;
+        origin_x = 0.01 + interval_x; origin_y = 0.13 - interval_y;
+    }
 } state_obj;
 
 state_t *state = &state_obj;
@@ -88,6 +105,12 @@ my_param_changed (parameter_listener_t *pl, parameter_gui_t *pg, const char *nam
         printf ("%s changed\n", name);
 }
 
+void get_image_coordinates(double x, double y, double& coord_x, double& coord_y) {
+    coord_x = round((x + 1) * state->img_width / 2. + 0.5);
+    coord_y = state->img_height - round((y + state->img_height / (state->img_width * 1.)) * state->img_width / 2. + 0.5);
+    printf("Coords x = %d, y = %d\n", (int)coord_x, (int)coord_y);
+}
+
 static int
 mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_t *pos, vx_mouse_event_t *mouse)
 {
@@ -103,9 +126,25 @@ mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_t *pos, vx_
         double ground[3];
         vx_ray3_intersect_xy (&ray, 0, ground);
 
-        printf ("Mouse clicked at coords: [%8.3f, %8.3f]  Ground clicked at coords: [%6.3f, %6.3f]\n",
-                mouse->x, mouse->y, ground[0], ground[1]);
+        double camera_vector[3] = {0,0,1};
+        get_image_coordinates(ground[0], ground[1], camera_vector[0], camera_vector[1]);
 
+        if (state->converter_initialized) {
+            double arm_vector[3] = {0,0,1};
+            state->converter.camera_to_arm(arm_vector, camera_vector);
+            printf("Camera coords: %g, %g\nArm coords: %g, %g", camera_vector[0], camera_vector[1], arm_vector[0], arm_vector[1]);
+
+            int a;
+            move_to(arm_vector[0], arm_vector[1], 0.13);
+            arm_fetch();
+            move_to(-(state->balls_placed % 3) * state->interval_x + state->origin_x, (state->balls_placed / 3) * state->interval_y + state->origin_y, 0.13);
+            arm_drop();
+
+            state->balls_placed++;
+        }
+        // printf ("Mouse clicked at coords: [%8.3f, %8.3f]  Camera coordinates clicked at: [%6.3f, %6.3f]\n",
+        //         mouse->x, mouse->y, camera_vector[0], camera_vector[1]);
+        // printf("Height: %d, Width: %d\n", state->img_height, state->img_width);
     }
 
     // store previous mouse event to see if the user *just* clicked or released
@@ -168,8 +207,11 @@ animate_thread (void *data)
                 printf ("get_frame fail: %d\n", res);
             else {
                 // Handle frame
-                if (state->current_image != NULL)
-                    image_u32_destroy (im);
+                pthread_mutex_lock(&state->mutex);    
+                if (state->current_image != NULL) {
+                    image_u32_destroy (state->current_image);
+                    state->current_image = NULL;
+                }
                 state->current_image = image_convert_u32 (frmd);
                 image_u32_t *im = state->current_image;
                 if (im != NULL) {
@@ -184,45 +226,15 @@ animate_thread (void *data)
                                                    vxo_mat_translate3 (-im->width/2., -im->height/2., 0.),
                                                    vim));
                     vx_buffer_swap (vx_world_get_buffer (state->vxworld, "image"));
+                    state->img_height = im->height;
+                    state->img_width = im->width;
                     // image_u32_destroy (im);
                 }
+                pthread_mutex_unlock(&state->mutex);                    
             }
             fflush (stdout);
             isrc->release_frame (isrc, frmd);
         }
-
-        // Example rendering of vx primitives
-        double rad = (vx_util_mtime () % 5000) * 2. * M_PI / 5e3;   // [ 0, 2PI]
-        double osc = ((vx_util_mtime () % 5000) / 5e3) * 2. - 1;    // [-1, 1]
-
-        // Creates a blue box and applies a series of rigid body transformations
-        // to it. A vxo_chain applies its arguments sequentially. In this case,
-        // then, we rotate our coordinate frame by rad radians, as determined
-        // by the current time above. Then, the origin of our coordinate frame
-        // is translated 0 meters along its X-axis and 0.5 meters along its
-        // Y-axis. Finally, a 0.1 x 0.1 x 0.1 cube (or box) is rendered centered at the
-        // origin, and is rendered with the blue mesh style, meaning it has
-        // solid, blue sides.
-        vx_object_t *vxo_sphere = vxo_chain (vxo_mat_rotate_z (rad),
-                                             vxo_mat_translate2 (0, 0.5),
-                                             vxo_mat_scale (0.1),
-                                             vxo_sphere (vxo_mesh_style (vx_blue)));
-
-        // Then, we add this object to a buffer awaiting a render order
-        vx_buffer_add_back (vx_world_get_buffer (state->vxworld, "rot-sphere"), vxo_sphere);
-
-        // Now we will render a red box that translates back and forth. This
-        // time, there is no rotation of our coordinate frame, so the box will
-        // just slide back and forth along the X axis. This box is rendered
-        // with a red line style, meaning it will appear as a red wireframe,
-        // in this case, with lines 2 px wide at a scale of 0.1 x 0.1 x 0.1.
-        vx_object_t *vxo_square = vxo_chain (vxo_mat_translate2 (osc, 0),
-                                             vxo_mat_scale (0.1),
-                                             vxo_box (vxo_lines_style (vx_red, 2)));
-
-        // We add this object to a different buffer so it may be rendered
-        // separately if desired
-        vx_buffer_add_back (vx_world_get_buffer (state->vxworld, "osc-square"), vxo_square);
 
 
         // Draw a default set of coordinate axes
@@ -232,8 +244,8 @@ animate_thread (void *data)
 
 
         // Now, we update both buffers
-        vx_buffer_swap (vx_world_get_buffer (state->vxworld, "rot-sphere"));
-        vx_buffer_swap (vx_world_get_buffer (state->vxworld, "osc-square"));
+        // vx_buffer_swap (vx_world_get_buffer (state->vxworld, "rot-sphere"));
+        // vx_buffer_swap (vx_world_get_buffer (state->vxworld, "osc-square"));
         vx_buffer_swap (vx_world_get_buffer (state->vxworld, "axes"));
 
         usleep (1000000/fps);
@@ -444,6 +456,129 @@ bool is_color(r_data& hsv, vector<double>& color_range) {
     return false;
 }
 
+void* start_inverse_kinematics(void* user) {
+    kin_main(state->argc, state->argv);
+    return NULL;
+}
+
+void get_coordinates_from_joints(double& x, double& y) {
+    double R = 0;
+    vector<double> arm_length = {0.118, 0.1, 0.0985, 0.099}; // change this accordingly
+    
+    R = arm_length[1] * sin(kin_state->arm_joints[1]) + arm_length[2] * sin(kin_state->arm_joints[1] + kin_state->arm_joints[2]);
+    R += arm_length[3] * sin(kin_state->arm_joints[1] + kin_state->arm_joints[2] + kin_state->arm_joints[3]);
+
+    x = R * sin(kin_state->arm_joints[0]);
+    y = - R * cos(kin_state->arm_joints[0]);
+}
+
+void read_matrices(double Amat[], double Cmat[]) {
+    ifstream fin("ConversionMatrices.txt");
+    for (int i = 0; i < 9; ++i) {
+        fin >> Cmat[i];
+    }
+    for (int i = 0; i < 9; ++i) {
+        fin >> Amat[i];
+    }
+    fin.close();
+}
+
+void save_matrices(double Amat[], double Cmat[]) {
+    ofstream fout("ConversionMatrices.txt");
+    for (int i = 0; i < 9; ++i) {
+        fout << Cmat[i] << " ";
+        if ((i - 2) % 3 == 0)
+            fout << endl;
+    }
+    for (int i = 0; i < 9; ++i) {
+        fout << Amat[i] << " ";
+        if ((i - 2) % 3 == 0)
+            fout << endl;
+    }
+    fout.close();
+}
+
+void calibrate_coordinate_converter(vector<int>& bbox, vector<vector<double> >& hsv_ranges) {
+    cout << "Calibrating..." << endl;
+
+    blob_detect B;
+    B.get_mask(bbox);
+    B.get_colors(hsv_ranges);
+    pthread_mutex_lock(&state->mutex);
+    B.run( state->current_image);
+    pthread_mutex_unlock(&state->mutex);
+
+
+    double Cmat[9] = {  0, 0, 0,
+                        0, 0, 0,
+                        1, 1, 1};
+    double Amat[9] = {  0, 0, 0,
+                        0, 0, 0,
+                        1, 1, 1};
+
+    if (state->use_cached_calibration) {
+        cout << "Using cached calibration" << endl;
+        read_matrices(Amat, Cmat);
+    } else {
+        cout << "Reading Camera Points..." << endl;
+        printf("Detected %d blobs\n", int(B.region_data.size()));
+        printf("Blue color HSV range is: [%g, %g, %g, %g, %g, %g]\n", hsv_ranges[0][0], hsv_ranges[0][1], hsv_ranges[0][2], hsv_ranges[0][3], hsv_ranges[0][4], hsv_ranges[0][5]);
+        vector<int> blue_blobs_order = {0, 0, 0, 0};
+        // showing blue square coordinates
+        for(size_t i = 0, j = 0; i < B.region_data.size(); i++){
+            if(B.region_data[i].area > 100 && is_color(B.region_data[i], hsv_ranges[0])){
+                printf("Blue square %d -- x: %g, y: %g, area: %d\n", int(i), B.region_data[i].x, B.region_data[i].y, B.region_data[i].area);
+            }
+        }
+        cout << "Please indicate the blue blobs order in letter Z order, -1 for blob not used: " << endl;
+        cin >> blue_blobs_order[0] >> blue_blobs_order[1] >> blue_blobs_order[2] >> blue_blobs_order[3];
+
+        for(size_t i = 0, j = 0; i < B.region_data.size(); i++){
+            // printf("Blob %d, color: [%g, %g, %g], x: %g, y: %g\n", i, 
+            //                             B.region_data[i].H, B.region_data[i].S, B.region_data[i].V,
+            //                             B.region_data[i].x, B.region_data[i].y);
+            if(B.region_data[i].area > 100 && is_color(B.region_data[i], hsv_ranges[0])){
+                if (blue_blobs_order[j] != -1) {
+                    Cmat[blue_blobs_order[j]] = B.region_data[i].x;
+                    Cmat[blue_blobs_order[j]+3] = B.region_data[i].y;
+                }
+                j++;
+                printf("Blue square %d -- x: %g, y: %g, area: %d\n", int(i), B.region_data[i].x, B.region_data[i].y, B.region_data[i].area);
+            }
+        }
+
+        cout << "Reading Arm Points..." << endl;
+        cout << "Please move arm tip to blue blobs" << endl;
+        relax_arm();
+        for (int i = 0; i < 3; ++i) {
+            string garbage;
+            cout << "Enter anything: ";
+            cin >> garbage;
+            cout << "Joint angles: ";
+            for (int j = 0; j < kin_state->arm_joints.size(); ++j) {
+                cout << kin_state->arm_joints[j] << ", ";
+            }
+            cout << endl;
+
+            double x, y;
+            get_coordinates_from_joints(x, y);
+            printf("X: %g, Y: %g\n", x, y);
+            Amat[i] = x;
+            Amat[i+3] = y;
+        }
+        save_matrices(Amat, Cmat);
+    }
+    
+    state->converter.c2a_get_factors(Amat, Cmat);
+
+    // test if conversion works:
+    double test_c[3] = {Cmat[0], Cmat[3], 1};
+    double test_a[3] = {-69, -69, -69};
+    state->converter.camera_to_arm(test_a, test_c);
+    printf("The first arm coordinate should be %g, %g\n", test_a[0], test_a[1]);
+    state->converter_initialized = true;
+}
+
 int main (int argc, char *argv[])
 {
     //read bounding box and color hsv ranges
@@ -452,56 +587,37 @@ int main (int argc, char *argv[])
     //                      *opponent color [...]]
     vector<int> bbox(4);
     vector<vector<double> > hsv_ranges(3, vector<double>(6));
-    read_bbox_and_colors(bbox, hsv_ranges);
-
-    blob_detect B;
-    B.get_mask(bbox);
-    B.get_colors(hsv_ranges);
 
     //start vx
-    pthread_t vx_thread;
+    state->argc = argc;
+    state->argv = argv;
+    pthread_t vx_thread, kinematics_thread;
     pthread_create (&vx_thread, NULL, start_vx, (void*)NULL);
+    pthread_create (&kinematics_thread, NULL, start_inverse_kinematics, (void*)NULL);
 
-    string our_turn;
-    cin >> turn;
-    if (turn != "our turn") {
-        // sleep 20 seconds
-        usleep(20000000);
+    // wait till vx has started
+    while(state->current_image == NULL) {
+        usleep(100000);
     }
 
-    if (state->current_image != NULL) {
-        B.run( state->current_image);
-        int cnt = 0;
-        double Cmat[9] = { 0, 0, 0,
-                        0, 0, 0,
-                        0, 0, 1};
-        double Bmat[9] = { 250, 0, 250,
-                        0, 0, 250,
-                        1, 1, 1};
+    read_bbox_and_colors(bbox, hsv_ranges);
+    calibrate_coordinate_converter(bbox, hsv_ranges);
 
+    // const double claw_rest_angle_c = -(pi/2 * 4/5.);
 
-        for(size_t i = 0, j = 0; i < B.region_data.size(); i++){
-            if(B.region_data[i].area > 100 && is_color(B.region_data[i], hsv_ranges[0])){
-                Cmat[j] = B.region_data[i].x;
-                Cmat[j+3] = B.region_data[i].y;
-                j++;
-            }
-        }
-        B.c2b_get_factors(Bmat, Cmat);
-        for (int i = 0; i < 3; ++i) {
-            string garbage;
-            cin >> garbage;
-            
-        }
-    }
+    // vector<double> initial_joints = {0, pi/2, 0,0,0,0};
+    // vector<double> initial_joints = {0.0713075, 0.565071, 0.513557, 2.06296, 0, claw_rest_angle_c};
+    // vector<double> initial_joints = {0, 0, 0, 0, 0, 0};
+    // move_joints(initial_joints);
 
+    // cout << "Whose turn is it? " << endl;
+    // string turn;
+    // cin >> turn;
 
-
-
-
-    // B.run();
-    //start command loop
-    
+    // if (turn != "ours") {
+    //     // sleep 20 seconds
+    //     usleep(20000000);
+    // }
 
 
     pthread_join (vx_thread, NULL);

@@ -41,6 +41,7 @@ void RGB_to_HSV( uint8_t R, uint8_t G, uint8_t B, HSV &out );
 struct r_data{
   int area;
   double x, y;
+  int label;
   double H;
   double S;
   double V;

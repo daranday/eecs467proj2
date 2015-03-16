@@ -44,10 +44,9 @@ void blob_detect::get_colors( vector<vector<double>> &input){
     color.Smax = input[i][3];
     color.Vmin = input[i][4];
     color.Vmax = input[i][5];
-
+    colors.push_back(color);
   }
 
-  colors.push_back(color);
   
   /*
   ifstream input
@@ -64,9 +63,9 @@ void blob_detect::get_colors( vector<vector<double>> &input){
 int blob_detect::which_color( HSV input ){
   for(int i = 0; i < int(colors.size()); i++){
     if( input.H >= colors[i].Hmin && input.H <= colors[i].Hmax &&
-	input.S >= colors[i].Smin && input.S <= colors[i].Smax &&
-	input.V >= colors[i].Vmin && input.V <= colors[i].Vmax){
-      return i;
+    	input.S >= colors[i].Smin && input.S <= colors[i].Smax &&
+    	input.V >= colors[i].Vmin && input.V <= colors[i].Vmax){
+        return i;
     }
   }
   return -1;
@@ -76,6 +75,7 @@ int blob_detect::which_color( HSV input ){
 //read in some image and convert it to u8x3 format
 void blob_detect::get_u8x3(image_u32_t *image_32){
   uint8_t R,G,B;
+  cout << image_32->width << ",  " << image_32->height << endl;
   image_83 = image_u8x3_create( image_32->width, image_32->height );
 
   //convert u32 image to a u8x3
@@ -99,7 +99,7 @@ void blob_detect::get_u8x3(image_u32_t *image_32){
   //image_u8x3_write_pnm( image_83, "pic_out.ppm" );
 
   //destroy image
-  image_u32_destroy( image_32 );
+  // image_u32_destroy( image_32 );
 }
   
 
@@ -110,10 +110,10 @@ bool blob_detect::good_pixel(int pixel, int c_index){
     RGB_to_HSV( image_83->buf[pixel], image_83->buf[pixel+1], image_83->buf[pixel+2], temp);
       
     if( colors[c_index].Hmin <= temp.H && colors[c_index].Hmax >= temp.H &&
-	colors[c_index].Smin <= temp.S && colors[c_index].Smax >= temp.S &&
-	colors[c_index].Vmin <= temp.V && colors[c_index].Vmax >= temp.V ){
-      //cout << "here" << endl;
-      return true;
+    	colors[c_index].Smin <= temp.S && colors[c_index].Smax >= temp.S &&
+    	colors[c_index].Vmin <= temp.V && colors[c_index].Vmax >= temp.V ){
+        //cout << "here" << endl;
+        return true;
     }
   }
   return false;
@@ -122,7 +122,7 @@ bool blob_detect::good_pixel(int pixel, int c_index){
 
 void blob_detect::connect_pixels(int pixel, int c_index){
   int temp = 0;
-  int sum = pixel, sum_x = (pixel % image_83->stride), area = 0;
+  int sum = pixel, sum_x = (pixel % image_83->stride), sum_y = (pixel / image_83->stride), area = 0;
   r_data t;
   stack<int> pixels;
   pixels.push( pixel );
@@ -144,6 +144,7 @@ void blob_detect::connect_pixels(int pixel, int c_index){
 
       sum += pixels.top();
       sum_x += (pixels.top() % image_83->stride);
+      sum_y += (pixels.top() / image_83->stride);
       
     }
     //N
@@ -154,6 +155,7 @@ void blob_detect::connect_pixels(int pixel, int c_index){
       
       sum += pixels.top();
       sum_x += (pixels.top() % image_83->stride);
+      sum_y += (pixels.top() / image_83->stride);
       
     }
     //NE
@@ -164,6 +166,7 @@ void blob_detect::connect_pixels(int pixel, int c_index){
 
       sum += pixels.top();
       sum_x += (pixels.top() % image_83->stride);
+      sum_y += (pixels.top() / image_83->stride);
       
     }
     //E
@@ -174,6 +177,7 @@ void blob_detect::connect_pixels(int pixel, int c_index){
 
       sum += pixels.top();
       sum_x += (pixels.top() % image_83->stride);
+      sum_y += (pixels.top() / image_83->stride);
       
     }
     //SE
@@ -184,6 +188,7 @@ void blob_detect::connect_pixels(int pixel, int c_index){
 
       sum += pixels.top();
       sum_x += (pixels.top() % image_83->stride);
+      sum_y += (pixels.top() / image_83->stride);
      
     }
     //S
@@ -194,6 +199,7 @@ void blob_detect::connect_pixels(int pixel, int c_index){
 
       sum += pixels.top();
       sum_x += (pixels.top() % image_83->stride);
+      sum_y += (pixels.top() / image_83->stride);
       
     }
     //SW
@@ -204,6 +210,7 @@ void blob_detect::connect_pixels(int pixel, int c_index){
 
       sum += pixels.top();
       sum_x += (pixels.top() % image_83->stride);
+      sum_y += (pixels.top() / image_83->stride);
       
     }
     //W
@@ -214,6 +221,7 @@ void blob_detect::connect_pixels(int pixel, int c_index){
 
       sum += pixels.top();
       sum_x += (pixels.top() % image_83->stride);
+      sum_y += (pixels.top() / image_83->stride);
  
     }
       
@@ -223,45 +231,45 @@ void blob_detect::connect_pixels(int pixel, int c_index){
 
   double center = double(sum/3)/double(area);
   double x_center = double(sum_x)/double(area);
+  double y_center = double(sum_y)/double(area);
 
   
 
   t.area = area;
-  t.x = x_center / 3.0;
-  t.y = center / double(image_83->stride/3);
+  t.x = x_center / 3;
+  t.y = y_center;
+  // t.y = center / double(image_83->stride/3);
   area = 0;
     
   region_data.push_back( t );
-
 }
 
 void blob_detect::run_detector(){
-  int index = 0;
-  int color_index = -1;
-  HSV temp;
-  //iterate through all elements of the buffer to find all pixels
-  for(int y = y_mask_min; y < y_mask_max; y++){
-    for(int x = x_mask_min; x < x_mask_max; x++){
-      //looking for just green now
-      index = 3*x + y*image_83->stride;
-      if( region_83->buf[ index] == 0 ){
-	  
-	RGB_to_HSV( image_83->buf[index], image_83->buf[index+1], image_83->buf[index+2], temp);
-	color_index = which_color(temp);
-	  
-	if( color_index != -1){
-	  connect_pixels( index, color_index);
-	  region_data[region_data.size()-1].H = (colors[color_index].Hmin + colors[color_index].Hmax)/2.0;
-	  region_data[region_data.size()-1].S = (colors[color_index].Smin + colors[color_index].Smax)/2.0;
-	  region_data[region_data.size()-1].V = (colors[color_index].Vmin + colors[color_index].Vmax)/2.0;
-	  region+=40;
-	}
-		
-      }
-		
+    int index = 0;
+    int color_index = -1;
+    HSV hsv_value;
+    //iterate through all elements of the buffer to find all pixels
+    for(int y = y_mask_min; y < y_mask_max; y++){
+        for(int x = x_mask_min; x < x_mask_max; x++){
+            //looking for just green now
+            index = 3*x + y*image_83->stride;
+            if( region_83->buf[ index] == 0 ){
+                RGB_to_HSV( image_83->buf[index], image_83->buf[index+1], image_83->buf[index+2], hsv_value);
+
+                color_index = which_color(hsv_value);
+
+                  
+                if( color_index != -1){
+                    connect_pixels( index, color_index);
+                    region_data[region_data.size()-1].label = color_index;
+                    region_data[region_data.size()-1].H = (colors[color_index].Hmin + colors[color_index].Hmax)/2.0;
+                    region_data[region_data.size()-1].S = (colors[color_index].Smin + colors[color_index].Smax)/2.0;
+                    region_data[region_data.size()-1].V = (colors[color_index].Vmin + colors[color_index].Vmax)/2.0;
+                    region+=40;
+                }
+            }
+        }
     }
-	
-  }
 	
   //output for debugging
   image_u8x3_write_pnm( region_83, "pic_out.ppm" );
@@ -285,120 +293,81 @@ void blob_detect::run_detector(){
 //    return 0;
 // }
 
-void HSV_to_RGB( double H, double S, double V ){
-    double hh, p, q, t, ff;
-    double R, G, B;
-    long        i;
-    //V = V/100.0;
-    S = S/100.0;
-
-    if( S <= 0.0) {       // < is bogus, just shuts up warnings
-        R = V;
-        G = V;
-        B = V;
-        return;
-    }
-    hh = H;
-    if(hh >= 360.0) hh = 0.0;
-    hh /= 60.0;
-    i = (long)hh;
-    ff = hh - i;
-    p = V * (1.0 - S);
-    q = V * (1.0 - (S * ff));
-    t = V * (1.0 - (S * (1.0 - ff)));
-
-    switch(i) {
-    case 0:
-        R = V;
-        G = t;
-        B = p;
-        break;
-    case 1:
-        R = q;
-        G = V;
-        B = p;
-        break;
-    case 2:
-        R = p;
-        G = V;
-        B = t;
-        break;
-
-    case 3:
-        R = p;
-        G = q;
-        B = V;
-        break;
-    case 4:
-        R = t;
-        G = p;
-        B = V;
-        break;
-    case 5:
-    default:
-        R = V;
-        G = p;
-        B = q;
-        break;
-    }
-
-    //cout << "R1: " << R*(255.0/100.0) << " G1: " << G*(255.0/100.0) << " B1: " << B*(255.0/100.0) << endl;
-
-}
 
 //convert HSV values to usable RGB
 void RGB_to_HSV( uint8_t R, uint8_t G, uint8_t B, HSV &out ){
-  double Cmax, Cmin, d;
-  double R1, G1, B1;
+    double b = double(B)/255.0;
+    double g = double(G)/255.0;
+    double r = double(R)/255.0;
+    double rgb_max = std::max(r, std::max(g, b));
+    double rgb_min = std::min(r, std::min(g, b));
+    double delta = rgb_max - rgb_min;
+    out.S = delta / (rgb_max + 1e-20f);
+    out.V = rgb_max;
 
-  //cout << "R: " << int(R) << " G: " << int(G) << " B: " << int(B) << endl;
+    double hue;
+    if (r == rgb_max)
+        hue = (g - b) / (delta + 1e-20f);
+    else if (g == rgb_max)
+        hue = 2 + (b - r) / (delta + 1e-20f);
+    else
+        hue = 4 + (r - g) / (delta + 1e-20f);
+    if (hue < 0)
+        hue += 6.f;
+    out.H = hue * (1.f / 6.f);
 
-  //get into a %
-  R1 = 100*double(R)/255.0;
-  G1 = 100*double(G)/255.0;
-  B1 = 100*double(B)/255.0;
 
 
-  //find Cmax
-  Cmax = (G1 < R1) ? R1 : G1;
-  Cmax = (Cmax > B1) ? Cmax : B1; 
 
-  //find Cmin
-  Cmin = ( R1 < G1 ) ? R1 : G1;
-  Cmin = ( Cmin < B1 ) ? Cmin : B1; 
 
-  d = Cmax- Cmin;
 
-  //calculate saturation
-  if( Cmax )
-    out.S = 100*(d/Cmax);
-  else
-    out.S = 0;
+  // double Cmax, Cmin, d;
+  // double R1, G1, B1;
 
-  out.V = Cmax;
+  // //cout << "R: " << int(R) << " G: " << int(G) << " B: " << int(B) << endl;
 
-  //calculate hue
-  if( Cmax > 0.0 ) { 
-    out.S = 100*(d / Cmax);                  
-  } 
-  else {
-    out.S = 0.0;
-    out.H = NAN;                           
-    return;
-  }
-  if( R1 >= Cmax )                           
-    out.H = ( G1 - B1 ) / d;        
-  else if( G1 >= Cmax )
-    out.H = 2.0 + ( B1 - R1 ) / d; 
-  else
-    out.H = 4.0 + ( R1 - G1 ) / d;
+  // //get into a %
+  // R1 = 100*double(R)/255.0;
+  // G1 = 100*double(G)/255.0;
+  // B1 = 100*double(B)/255.0;
 
-  out.H *=60.0;
 
-  if( out.H < 0.0 )
-    out.H += 360.0;
+  // //find Cmax
+  // Cmax = (G1 < R1) ? R1 : G1;
+  // Cmax = (Cmax > B1) ? Cmax : B1; 
 
-  HSV_to_RGB( out.H, out.S, out.V);
-  //while(1){}
-  
+  // //find Cmin
+  // Cmin = ( R1 < G1 ) ? R1 : G1;
+  // Cmin = ( Cmin < B1 ) ? Cmin : B1; 
+
+  // d = Cmax- Cmin;
+
+  // //calculate saturation
+  // if( Cmax )
+  //   out.S = 100*(d/Cmax);
+  // else
+  //   out.S = 0;
+
+  // out.V = Cmax;
+
+  // //calculate hue
+  // if( Cmax > 0.0 ) { 
+  //   out.S = 100*(d / Cmax);                  
+  // } 
+  // else {
+  //   out.S = 0.0;
+  //   out.H = NAN;                           
+  //   return;
+  // }
+  // if( R1 >= Cmax )                           
+  //   out.H = ( G1 - B1 ) / d;        
+  // else if( G1 >= Cmax )
+  //   out.H = 2.0 + ( B1 - R1 ) / d; 
+  // else
+  //   out.H = 4.0 + ( R1 - G1 ) / d;
+
+  // out.H *=60.0;
+
+  // if( out.H < 0.0 )
+  //   out.H += 360.0;
 }

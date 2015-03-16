@@ -13,18 +13,12 @@
 using namespace std;
 
 class coord_convert{
- public:
-  matd_t * c2b_Conv;
-  matd_t * b2a_Conv;
+public:
+	matd_t * c2a_Conv;
 
-  coord_convert();
-
-  void c2b_get_factors(double b[], double c[]);
-  void b2a_get_factors(double a[], double b[]);
-  void board_to_arm( double a[], double b[]);
-  void camera_to_board( double b[], double c[]);
-  void camera_to_arm(double a[], double c[]);
-
+	coord_convert();
+	void c2a_get_factors(double a[], double c[]);
+	void camera_to_arm(double a[], double c[]);
 };
 
 #endif
