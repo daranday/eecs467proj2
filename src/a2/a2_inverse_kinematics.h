@@ -41,5 +41,6 @@ int kin_main (int argc, char *argv[]);
 void relax_arm();
 void arm_fetch();
 void arm_drop();
+void stand_arm();
 
 #endif

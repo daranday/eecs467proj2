@@ -108,7 +108,7 @@ my_param_changed (parameter_listener_t *pl, parameter_gui_t *pg, const char *nam
 void get_image_coordinates(double x, double y, double& coord_x, double& coord_y) {
     coord_x = round((x + 1) * state->img_width / 2. + 0.5);
     coord_y = state->img_height - round((y + state->img_height / (state->img_width * 1.)) * state->img_width / 2. + 0.5);
-    printf("Coords x = %d, y = %d\n", (int)coord_x, (int)coord_y);
+    printf("Input x = %g, y = %g, Coords x = %d, y = %d\n", x, y, (int)coord_x, (int)coord_y);
 }
 
 static int
@@ -139,6 +139,7 @@ mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_t *pos, vx_
             arm_fetch();
             move_to(-(state->balls_placed % 3) * state->interval_x + state->origin_x, (state->balls_placed / 3) * state->interval_y + state->origin_y, 0.13);
             arm_drop();
+            stand_arm();
 
             state->balls_placed++;
         }
@@ -498,12 +499,9 @@ void save_matrices(double Amat[], double Cmat[]) {
     fout.close();
 }
 
-void calibrate_coordinate_converter(vector<int>& bbox, vector<vector<double> >& hsv_ranges) {
+void calibrate_coordinate_converter(blob_detect &B, vector<int>& bbox, vector<vector<double> >& hsv_ranges) {
     cout << "Calibrating..." << endl;
 
-    blob_detect B;
-    B.get_mask(bbox);
-    B.get_colors(hsv_ranges);
     pthread_mutex_lock(&state->mutex);
     B.run( state->current_image);
     pthread_mutex_unlock(&state->mutex);
@@ -579,6 +577,43 @@ void calibrate_coordinate_converter(vector<int>& bbox, vector<vector<double> >& 
     state->converter_initialized = true;
 }
 
+void get_camera_to_arm(double camera_x, double camera_y, double& x, double& y) {
+    double camera_vector[3] = {camera_x, camera_y, 1};
+    double arm_vector[3] = {-69, -69, -69};
+    state->converter.camera_to_arm(arm_vector, camera_vector);
+    x = arm_vector[0];
+    y = arm_vector[1];
+}
+
+void get_board_state(string& board_state, blob_detect& B, vector<vector<double> >& hsv_ranges) {
+    board_state = ".........";
+    pthread_mutex_lock(&state->mutex);
+    B.run( state->current_image);
+    pthread_mutex_unlock(&state->mutex);
+
+    for(size_t i = 0, j = 0; i < B.region_data.size(); i++){
+        // my pieces
+        double x, y;
+        get_camera_to_arm(B.region_data[i].x, B.region_data[i].y, x, y);
+        if(B.region_data[i].area < 100)
+            continue; 
+
+        if (state->origin_x - 2 * state->interval_x <= x && x <= state->origin_x && state->origin_y <= y && y <= state->origin_y + 2 * state->interval_y) {
+            int idx_i = int((state->origin_x - x) / state->interval_x);
+            int idx_j = int((y - state->origin_y) / state->interval_y);
+            printf("%d, Area: %d, Label: %d, Image x = %g, y = %g. Index: x = %d, y = %d\n", i, B.region_data[i].area, B.region_data[i].label, B.region_data[i].x, B.region_data[i].y, idx_i, idx_j);
+
+            if (B.region_data[i].label == 1) {
+                cout << "Is R" << endl;
+                board_state[idx_i + 3 * idx_j] = 'R';
+            } else if (B.region_data[i].label == 2) {
+                cout << "Is G" << endl;
+                board_state[idx_i + 3 * idx_j] = 'G';
+            }
+        }
+    }
+}
+
 int main (int argc, char *argv[])
 {
     //read bounding box and color hsv ranges
@@ -601,7 +636,25 @@ int main (int argc, char *argv[])
     }
 
     read_bbox_and_colors(bbox, hsv_ranges);
-    calibrate_coordinate_converter(bbox, hsv_ranges);
+
+    blob_detect B;
+    B.get_mask(bbox);
+    B.get_colors(hsv_ranges);
+    
+    calibrate_coordinate_converter(B, bbox, hsv_ranges);
+
+
+    while (1) {
+        string board_state;
+        get_board_state(board_state, B, hsv_ranges);
+
+        for (int i = 0; i < 9; ++i) {
+            cout << board_state[i];
+            if ((i-2) % 3 == 0)
+                cout << endl;
+        }
+        usleep(1000000);
+    }
 
     // const double claw_rest_angle_c = -(pi/2 * 4/5.);
 

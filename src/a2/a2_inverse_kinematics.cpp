@@ -163,6 +163,13 @@ void arm_drop() {
     move_joints(kin_state->cmd_angles);
 }
 
+void stand_arm() {
+    const double claw_rest_angle_c = -(pi/2 * 4/5.);
+    vector<double> initial_joints = {0, 0, 0, 0, 0, claw_rest_angle_c};
+    kin_state->cmd_angles = initial_joints;
+    move_joints(initial_joints);
+}
+
 // This subscribes to the status messages sent out by the arm, displaying servo
 // kin_state in the terminal. It also sends messages to the arm ordering it to the
 // "home" position (all servos at 0 radians).
@@ -187,13 +194,10 @@ int kin_main (int argc, char *argv[])
 
     pthread_create (&kin_state->status_thread, NULL, status_loop, (void*)NULL);
 
-    const double claw_rest_angle_c = -(pi/2 * 4/5.);
 
     // vector<double> initial_joints = {0, pi/2, 0,0,0,0};
     // vector<double> initial_joints = {0.0713075, 0.565071, 0.513557, 2.06296, 0, claw_rest_angle_c};
-    vector<double> initial_joints = {0, 0, 0, 0, 0, claw_rest_angle_c};
-    kin_state->cmd_angles = initial_joints;
-    move_joints(initial_joints);
+    stand_arm();
 
     // double interval_x = 0.065, interval_y = 0.065;
     // double origin_x = 0.01 + interval_x , origin_y = 0.13 - interval_y;
