@@ -20,6 +20,8 @@ blob_detect::~blob_detect(){
 
 void blob_detect::run(image_u32_t *image_32){
   get_u8x3(image_32);
+  region = 1;
+  region_data.clear();
   region_83 = image_u8x3_create( image_83->width, image_83->height );
   x_mask_min =  y_mask_min =  0;
   x_mask_max = image_83->width;
@@ -274,8 +276,11 @@ void blob_detect::run_detector(){
   //output for debugging
   image_u8x3_write_pnm( region_83, "pic_out.ppm" );
 
-  for(size_t i = 0; i < region_data.size(); i++)
-    cout << "region: " << i << " area: " << region_data[i].area << " x: " << region_data[i].x << " y: " << region_data[i].y << endl;
+  for(size_t i = 0; i < region_data.size(); i++){
+    if(region_data[i].area > 200 )
+      cout << "region: " << i << " area: " << region_data[i].area << " x: " << region_data[i].x << " y: " << region_data[i].y << endl;
+    
+  }
 }
 
 // int _main(){

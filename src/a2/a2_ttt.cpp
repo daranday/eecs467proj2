@@ -33,6 +33,7 @@
 #include "a2_blob_detector.h"
 #include "a2_inverse_kinematics.h"
 #include "a2_image_to_arm_coord.h"
+#include "a2_ai.h"
 
 
 using namespace std;
@@ -597,11 +598,13 @@ void get_board_state(string& board_state, blob_detect& B, vector<vector<double> 
         get_camera_to_arm(B.region_data[i].x, B.region_data[i].y, x, y);
         if(B.region_data[i].area < 100)
             continue; 
+        printf("%d, Area: %d, Label: %d, Image x = %g, y = %g. x = %g, y = %g\n", i, B.region_data[i].area, B.region_data[i].label, B.region_data[i].x, B.region_data[i].y, x, y);
 
-        if (state->origin_x - 2 * state->interval_x <= x && x <= state->origin_x && state->origin_y <= y && y <= state->origin_y + 2 * state->interval_y) {
+
+        if (state->origin_x - 3 * state->interval_x <= x && x <= state->origin_x && state->origin_y <= y && y <= state->origin_y + 3 * state->interval_y) {
             int idx_i = int((state->origin_x - x) / state->interval_x);
             int idx_j = int((y - state->origin_y) / state->interval_y);
-            printf("%d, Area: %d, Label: %d, Image x = %g, y = %g. Index: x = %d, y = %d\n", i, B.region_data[i].area, B.region_data[i].label, B.region_data[i].x, B.region_data[i].y, idx_i, idx_j);
+            printf("---%d, Area: %d, Label: %d, Image x = %g, y = %g. Index: x = %d, y = %d\n", i, B.region_data[i].area, B.region_data[i].label, B.region_data[i].x, B.region_data[i].y, idx_i, idx_j);
 
             if (B.region_data[i].label == 1) {
                 cout << "Is R" << endl;
@@ -623,6 +626,7 @@ int main (int argc, char *argv[])
     vector<int> bbox(4);
     vector<vector<double> > hsv_ranges(3, vector<double>(6));
 
+    read_bbox_and_colors(bbox, hsv_ranges);
     //start vx
     state->argc = argc;
     state->argv = argv;
@@ -635,7 +639,6 @@ int main (int argc, char *argv[])
         usleep(100000);
     }
 
-    read_bbox_and_colors(bbox, hsv_ranges);
 
     blob_detect B;
     B.get_mask(bbox);
@@ -645,6 +648,7 @@ int main (int argc, char *argv[])
 
 
     while (1) {
+        // wait_turn();
         string board_state;
         get_board_state(board_state, B, hsv_ranges);
 
@@ -653,25 +657,11 @@ int main (int argc, char *argv[])
             if ((i-2) % 3 == 0)
                 cout << endl;
         }
-        usleep(1000000);
+        // double ball_x, ball_y;
+        // find_free_piece(ball_x, ball_y);
+        // int idx = AiPlayer.aiPlay();
+        // make_move(ball_x, ball_y, idx % 3, idx / 3);
     }
-
-    // const double claw_rest_angle_c = -(pi/2 * 4/5.);
-
-    // vector<double> initial_joints = {0, pi/2, 0,0,0,0};
-    // vector<double> initial_joints = {0.0713075, 0.565071, 0.513557, 2.06296, 0, claw_rest_angle_c};
-    // vector<double> initial_joints = {0, 0, 0, 0, 0, 0};
-    // move_joints(initial_joints);
-
-    // cout << "Whose turn is it? " << endl;
-    // string turn;
-    // cin >> turn;
-
-    // if (turn != "ours") {
-    //     // sleep 20 seconds
-    //     usleep(20000000);
-    // }
-
 
     pthread_join (vx_thread, NULL);
     return 0;
