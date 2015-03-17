@@ -265,24 +265,24 @@ int AI::findNewMoveHelper() {
 
 }
 
-int main() {
+// int main() {
 
-    AI A;
-    A.printBoard();
+//     AI A;
+//     A.printBoard();
 
-    cout << "game starts" << endl;
-    while(1) {
-        A.checkEnd();
-        A.aiPlay();
-        cout << "Computer played a move" << endl;
-        A.printBoard();
-        A.checkEnd();
+//     cout << "game starts" << endl;
+//     while(1) {
+//         A.checkEnd();
+//         A.aiPlay();
+//         cout << "Computer played a move" << endl;
+//         A.printBoard();
+//         A.checkEnd();
 
-        // The following three lines will be replaced by receiving a new board
-        A.oppPlay();
-        cout << "Opponent played a move" << endl;
-        A.printBoard();
-    }
+//         // The following three lines will be replaced by receiving a new board
+//         A.oppPlay();
+//         cout << "Opponent played a move" << endl;
+//         A.printBoard();
+//     }
 
-    return 0;
-}
+//     return 0;
+// }
