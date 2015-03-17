@@ -67,7 +67,7 @@ int AI::twoD2oneD(int x, int y) {
 }
 
 pair<int, int> AI::oneD2twoD(int x) {
-    return pair<int, int> (x % 3, x/3);
+    return pair<int, int> (abs(x % 3 - 2), abs(x/3 - 2));
 }
 
 bool AI::isValidCoord2D(int x, int y) {
@@ -96,7 +96,8 @@ void AI::receiveBoard(string newBoard) {
 void AI::aiPlay() {
 
     move = findNewMove();
-    cout << "Computer played: " << move << endl;
+    pair<int, int> coord = oneD2twoD(move);
+    cout << "Computer played a move at " << coord.first << ", " << coord.second << '(' << move << ')' << endl;
     if(board[move] != '.') {
         cout << "spot taken. lose a turn" << endl;
         return;
@@ -112,6 +113,15 @@ void AI::oppPlay() {
 
     cout << "Enter move: ";
     cin >> oppMove;
+
+    cout << "Oppenent entered: " << oppMove << endl;
+
+    oppMove = abs(oppMove - 8);
+
+    cout << "After conversion: " << oppMove << endl;
+
+    pair<int, int> coord = oneD2twoD(oppMove);
+    cout << "Opponent played a move at " << coord.first << ", " << coord.second << '(' << oppMove << ')' << endl;
 
     if(board[oppMove] != '.') {
         cout << "spot taken. lose a turn" << endl;
@@ -148,7 +158,7 @@ int AI::findNewMoveHelper() {
 
     if(isBoardEmpty()) {
         cout << "board is empty" << endl;
-        return 4;
+        return 0;
     }
 
     int wins[8][3] = {{0,1,2},{3,4,5},{6,7,8},{0,3,6},{1,4,7},{2,5,8},{0,4,8},{2,4,6}};
@@ -274,15 +284,14 @@ int AI::findNewMoveHelper() {
 //     while(1) {
 //         A.checkEnd();
 //         A.aiPlay();
-//         cout << "Computer played a move" << endl;
+
 //         A.printBoard();
 //         A.checkEnd();
 
 //         // The following three lines will be replaced by receiving a new board
 //         A.oppPlay();
-//         cout << "Opponent played a move" << endl;
 //         A.printBoard();
 //     }
 
 //     return 0;
-// }
+}
