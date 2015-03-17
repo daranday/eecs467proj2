@@ -12,6 +12,8 @@
 #include "common/getopt.h"
 #include "common/timestamp.h"
 #include "a2_inverse_kinematics.h"
+#include "math/angle_functions.hpp"    // This is where a lot of the internals live
+
 
 #define NUM_SERVOS 6
 const double pi = 3.1415926;
@@ -63,9 +65,11 @@ void move_to(double x, double y, double z, double wrist_tilt) {
         return;
     }
     printf("Moving to %g, %g, %g\n", x, y, z);
+    bool moving_horizontal = false;
     if (abs(x - kin_state->cmd_position[0]) + abs(kin_state->cmd_position[1] - y) > 0.0001) {
         kin_state->cmd_angles[1] = -pi/6;
         move_joints(kin_state->cmd_angles);
+        moving_horizontal = true;
     }
     kin_state->cmd_position[0] = x;
     kin_state->cmd_position[1] = y;
@@ -76,8 +80,11 @@ void move_to(double x, double y, double z, double wrist_tilt) {
     
 
     double R = sqrt(pow(x, 2) + pow(y, 2));
-    kin_state->cmd_angles[0] = atan2(x, y); // x and y reversed because angle begins from y, not x axis.
+    kin_state->cmd_angles[0] = eecs467::angle_sum(atan2(x, y), 0.02/R); // x and y reversed because angle begins from y, not x axis.
     
+    if (moving_horizontal)
+        move_joints(kin_state->cmd_angles);
+
     double M = sqrt(pow(R, 2) + pow(arm_length[3] + z - arm_length[0], 2));
     double alpha = atan2(arm_length[3] + z - arm_length[0], R);
     double beta  = acos((-pow(arm_length[2], 2) + pow(arm_length[1], 2) + pow(M, 2)) / (2 * arm_length[1] * M));

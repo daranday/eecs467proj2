@@ -15,10 +15,12 @@ using namespace std;
 class coord_convert{
 public:
 	matd_t * c2a_Conv;
+	matd_t * a2c_Conv;
 
 	coord_convert();
 	void c2a_get_factors(double a[], double c[]);
 	void camera_to_arm(double a[], double c[]);
+	void arm_to_camera(double c[], double a[]);
 };
 
 #endif

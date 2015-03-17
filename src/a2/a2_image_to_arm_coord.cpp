@@ -18,12 +18,14 @@ coord_convert::coord_convert(){
 }
 
 void coord_convert::c2a_get_factors(double a[], double c[]){
-	
+  
   int n = 3;
   matd_t *A = matd_create_data(n, n, a);
   matd_t *C = matd_create_data(n, n, c);
   matd_t *invC = matd_inverse(C);
   c2a_Conv = matd_multiply(A, invC);
+  matd_t *invA = matd_inverse(A);
+  a2c_Conv = matd_multiply(C, invA);
 }
 
 void coord_convert::camera_to_arm(double a[], double c[]){
@@ -34,6 +36,16 @@ void coord_convert::camera_to_arm(double a[], double c[]){
   a[0] = matd_get(A, 0, 0);
   a[1] = matd_get(A, 0, 1);
   a[2] = matd_get(A, 0, 2);
+}
+
+void coord_convert::arm_to_camera(double c[], double a[]){
+  int n = 3;
+
+  matd_t *A = matd_create_data(n, 1, a);
+  matd_t *C = matd_multiply(a2c_Conv, A);
+  c[0] = matd_get(C, 0, 0);
+  c[1] = matd_get(C, 0, 1);
+  c[2] = matd_get(C, 0, 2);
 }
 
 /*int main(){

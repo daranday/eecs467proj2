@@ -33,10 +33,63 @@
 #include "a2_blob_detector.h"
 #include "a2_inverse_kinematics.h"
 #include "a2_image_to_arm_coord.h"
-#include "a2_ai.h"
+//#include "a2_ai.h"
 
+//lcm
+#include "lcm/lcm-cpp.hpp"
+//#include "lcmtypes/ttt_turn_t.hpp"
 
 using namespace std;
+
+//LCM setup
+pthread_mutex_t md;
+lcm::LCM lcm_inst;
+
+void *lcm_comm(void *input){
+  while(true){
+    lcm_inst.handle();
+  }
+
+}
+
+struct move_t{
+  int64_t utime;
+  int32_t turn;
+};
+
+/*
+struct comms{
+  move_t current;
+  move_t last;
+  bool move_done;
+
+  comms(){
+    move_done = false;
+
+  }
+
+  void ttt_turn_handler(const lcm::ReceiveBuffer* rbuf, const string &channel, const ttt_turn_t* msg){
+    pthread_mutex_lock(&md);
+    move_done = true;
+    last = current;
+    current.utime = msg->utime;
+    current.turn = msg->turn;
+    pthread_mutex_unlock(&md);
+  }
+
+  bool wait_turn(){
+    bool temp;
+    pthread_mutex_lock(&md);
+    temp = move_done;
+    move_done = false;
+    pthread_mutex_unlock(&md);
+    return temp;
+    
+  }
+
+};
+*/
+
 
 // It's good form for every application to keep its state in a struct.
 struct state_t {
@@ -81,8 +134,8 @@ struct state_t {
     state_t() : current_image(NULL), converter_initialized(false), balls_placed(0) {
         use_cached_bbox_colors = (ifstream("Bbox_Colors.txt")) ? true : false;
         use_cached_calibration = (ifstream("ConversionMatrices.txt")) ? true : false;
-        interval_x = 0.065; interval_y = 0.065;
-        origin_x = 0.01 + interval_x; origin_y = 0.13 - interval_y;
+        interval_x = 0.06; interval_y = 0.06;
+        origin_x = 0.06; origin_y = 0.06;
     }
 } state_obj;
 
@@ -106,10 +159,24 @@ my_param_changed (parameter_listener_t *pl, parameter_gui_t *pg, const char *nam
         printf ("%s changed\n", name);
 }
 
-void get_image_coordinates(double x, double y, double& coord_x, double& coord_y) {
-    coord_x = round((x + 1) * state->img_width / 2. + 0.5);
-    coord_y = state->img_height - round((y + state->img_height / (state->img_width * 1.)) * state->img_width / 2. + 0.5);
-    printf("Input x = %g, y = %g, Coords x = %d, y = %d\n", x, y, (int)coord_x, (int)coord_y);
+void convert_vx_to_image_coords(double vx_x, double vx_y, double& image_x, double& image_y) {
+    image_x = round((vx_x + 1) * state->img_width / 2. + 0.5);
+    image_y = state->img_height - round((vx_y + state->img_height / (state->img_width * 1.)) * state->img_width / 2. + 0.5);
+    // printf("Input vx_x = %g, vx_y = %g, Coords vx_xx = %d, y = %d\n", vx_x, vx_y, (int)image_x, (int)image_y);
+}
+
+void convert_image_to_vx_coords(double image_x, double image_y, double& vx_x, double& vx_y) {
+    vx_x = ((image_x - 0.5)*2/state->img_width) - 1;
+    vx_y = 2*(state->img_height - image_y - 0.5)/state->img_width - state->img_height/state->img_width;
+    // cout << "----------" << vx_x << ", " << vx_y << endl;
+}
+
+void make_move(double ball_x, double ball_y, double idx_i, double idx_j) {
+    move_to(ball_x, ball_y, 0.13);
+    arm_fetch();
+    move_to(-(idx_i) * state->interval_x + state->origin_x, (idx_j) * state->interval_y + state->origin_y, 0.13);
+    arm_drop();
+    stand_arm();
 }
 
 static int
@@ -128,7 +195,7 @@ mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_t *pos, vx_
         vx_ray3_intersect_xy (&ray, 0, ground);
 
         double camera_vector[3] = {0,0,1};
-        get_image_coordinates(ground[0], ground[1], camera_vector[0], camera_vector[1]);
+        convert_vx_to_image_coords(ground[0], ground[1], camera_vector[0], camera_vector[1]);
 
         if (state->converter_initialized) {
             double arm_vector[3] = {0,0,1};
@@ -136,12 +203,8 @@ mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_t *pos, vx_
             printf("Camera coords: %g, %g\nArm coords: %g, %g", camera_vector[0], camera_vector[1], arm_vector[0], arm_vector[1]);
 
             int a;
-            move_to(arm_vector[0], arm_vector[1], 0.13);
-            arm_fetch();
-            move_to(-(state->balls_placed % 3) * state->interval_x + state->origin_x, (state->balls_placed / 3) * state->interval_y + state->origin_y, 0.13);
-            arm_drop();
-            stand_arm();
 
+            make_move(arm_vector[0], arm_vector[1], state->balls_placed % 3, state->balls_placed / 3);
             state->balls_placed++;
         }
         // printf ("Mouse clicked at coords: [%8.3f, %8.3f]  Camera coordinates clicked at: [%6.3f, %6.3f]\n",
@@ -239,16 +302,10 @@ animate_thread (void *data)
         }
 
 
-        // Draw a default set of coordinate axes
-        vx_object_t *vxo_axe = vxo_chain (vxo_mat_scale (0.1), // 10 cm axes
-                                          vxo_axes ());
-        vx_buffer_add_back (vx_world_get_buffer (state->vxworld, "axes"), vxo_axe);
-
-
         // Now, we update both buffers
         // vx_buffer_swap (vx_world_get_buffer (state->vxworld, "rot-sphere"));
         // vx_buffer_swap (vx_world_get_buffer (state->vxworld, "osc-square"));
-        vx_buffer_swap (vx_world_get_buffer (state->vxworld, "axes"));
+        // vx_buffer_swap (vx_world_get_buffer (state->vxworld, "axes"));
 
         usleep (1000000/fps);
     }
@@ -500,6 +557,44 @@ void save_matrices(double Amat[], double Cmat[]) {
     fout.close();
 }
 
+void get_camera_to_arm(double camera_x, double camera_y, double& x, double& y) {
+    double camera_vector[3] = {camera_x, camera_y, 1};
+    double arm_vector[3] = {-69, -69, -69};
+    state->converter.camera_to_arm(arm_vector, camera_vector);
+    x = arm_vector[0];
+    y = arm_vector[1];
+}
+
+void get_arm_to_camera(double x, double y, double& camera_x, double& camera_y) {
+    double camera_vector[3] = {0, 0, 1};
+    double arm_vector[3] = {x, y, 1};
+    state->converter.arm_to_camera(camera_vector, arm_vector);
+    camera_x = camera_vector[0];
+    camera_y = camera_vector[1];
+}
+
+// void calibrate_ttt_grid(vector<double>& blue_squares) {
+//     double x_origin, y_origin, x_interval, y_interval;
+//     double blue_side = 0;
+//     for (int i = 0; i < 4; ++i)
+//         blue_side += blue_squares[i * 3 + 2];
+
+//     blue_side = sqrt(blue_side / 4.0);
+
+//     double dx = blue_squares[4] - blue_squares[0], dy = blue_squares[5] - blue_squares[1];
+//     double grid_side = sqrt(pow(dx, 2) + pow(dy, 2));
+//     dx /= grid_side; dy /= grid_side;
+
+//     double image_origin_x = blue_squares[0] + blue_side / 2.0  * dx;
+//     double image_origin_y = blue_squares[1] + blue_side / 2.0  * dy;
+
+//     cout << "Before Calibrate Origins: " << state->origin_x << ", " << state->origin_y << endl;
+//     printf("Blue side = %g, grid_side = %g\n", blue_side, grid_side);
+//     get_camera_to_arm(image_origin_x, image_origin_y, state->origin_x, state->origin_y);
+//     cout << "After Calibrate Origins: " << state->origin_x << ", " << state->origin_y << endl;
+//     exit(0);
+// }
+
 void calibrate_coordinate_converter(blob_detect &B, vector<int>& bbox, vector<vector<double> >& hsv_ranges) {
     cout << "Calibrating..." << endl;
 
@@ -514,6 +609,8 @@ void calibrate_coordinate_converter(blob_detect &B, vector<int>& bbox, vector<ve
     double Amat[9] = {  0, 0, 0,
                         0, 0, 0,
                         1, 1, 1};
+
+    vector<double> blue_squares(12);
 
     if (state->use_cached_calibration) {
         cout << "Using cached calibration" << endl;
@@ -532,6 +629,7 @@ void calibrate_coordinate_converter(blob_detect &B, vector<int>& bbox, vector<ve
         cout << "Please indicate the blue blobs order in letter Z order, -1 for blob not used: " << endl;
         cin >> blue_blobs_order[0] >> blue_blobs_order[1] >> blue_blobs_order[2] >> blue_blobs_order[3];
 
+
         for(size_t i = 0, j = 0; i < B.region_data.size(); i++){
             // printf("Blob %d, color: [%g, %g, %g], x: %g, y: %g\n", i, 
             //                             B.region_data[i].H, B.region_data[i].S, B.region_data[i].V,
@@ -541,6 +639,10 @@ void calibrate_coordinate_converter(blob_detect &B, vector<int>& bbox, vector<ve
                     Cmat[blue_blobs_order[j]] = B.region_data[i].x;
                     Cmat[blue_blobs_order[j]+3] = B.region_data[i].y;
                 }
+                blue_squares[blue_blobs_order[j == -1 ? 3 : j] * 3] = B.region_data[i].x;
+                blue_squares[blue_blobs_order[j == -1 ? 3 : j] * 3 + 1] = B.region_data[i].y;
+                blue_squares[blue_blobs_order[j == -1 ? 3 : j] * 3 + 2] = B.region_data[i].area;
+
                 j++;
                 printf("Blue square %d -- x: %g, y: %g, area: %d\n", int(i), B.region_data[i].x, B.region_data[i].y, B.region_data[i].area);
             }
@@ -576,14 +678,21 @@ void calibrate_coordinate_converter(blob_detect &B, vector<int>& bbox, vector<ve
     state->converter.camera_to_arm(test_a, test_c);
     printf("The first arm coordinate should be %g, %g\n", test_a[0], test_a[1]);
     state->converter_initialized = true;
+    // calibrate_ttt_grid(blue_squares);
 }
 
-void get_camera_to_arm(double camera_x, double camera_y, double& x, double& y) {
-    double camera_vector[3] = {camera_x, camera_y, 1};
-    double arm_vector[3] = {-69, -69, -69};
-    state->converter.camera_to_arm(arm_vector, camera_vector);
-    x = arm_vector[0];
-    y = arm_vector[1];
+
+void render_blob(string shape, double x, double y, const float* color) {
+    char buffer_name[20] = "Debug_Buffer";
+
+    vx_buffer_add_back (vx_world_get_buffer(state->vxworld, buffer_name),
+                                vxo_chain(
+                                         vxo_mat_translate3(x, y - (1.0 * state->img_height)/state->img_width, 0.00001),
+                                         vxo_mat_scale(0.01),
+                                         (shape == "circle" ? vxo_circle(vxo_mesh_style(color))
+                                                            : vxo_box(vxo_mesh_style(color)))
+                                
+                                 ));
 }
 
 void get_board_state(string& board_state, blob_detect& B, vector<vector<double> >& hsv_ranges) {
@@ -592,29 +701,85 @@ void get_board_state(string& board_state, blob_detect& B, vector<vector<double> 
     B.run( state->current_image);
     pthread_mutex_unlock(&state->mutex);
 
+
+    double xx, yy, xxx, yyy;
+    get_arm_to_camera( state->origin_x + 0.5 * state->interval_x, state->origin_y - 0.5 * state->interval_y, xx, yy);
+    convert_image_to_vx_coords(xx, yy, xxx, yyy);
+    render_blob("box", xxx, yyy, vx_purple);
+    get_arm_to_camera( state->origin_x - 2.5 * state->interval_x, state->origin_y - 0.5 * state->interval_y, xx, yy);
+    convert_image_to_vx_coords(xx, yy, xxx, yyy);
+    render_blob("box", xxx, yyy, vx_yellow);
+    get_arm_to_camera( state->origin_x + 0.5 * state->interval_x, state->origin_y + 2.5 * state->interval_y, xx, yy);
+    convert_image_to_vx_coords(xx, yy, xxx, yyy);
+    render_blob("box", xxx, yyy, vx_red);
+    get_arm_to_camera( state->origin_x - 2.5 * state->interval_x, state->origin_y + 2.5 * state->interval_y, xx, yy);
+    convert_image_to_vx_coords(xx, yy, xxx, yyy);
+    render_blob("box", xxx, yyy, vx_green);
+
+
     for(size_t i = 0, j = 0; i < B.region_data.size(); i++){
         // my pieces
         double x, y;
+        double vx_x, vx_y;
         get_camera_to_arm(B.region_data[i].x, B.region_data[i].y, x, y);
+        convert_image_to_vx_coords(B.region_data[i].x, B.region_data[i].y, vx_x, vx_y);
+        
         if(B.region_data[i].area < 100)
             continue; 
-        printf("%d, Area: %d, Label: %d, Image x = %g, y = %g. x = %g, y = %g\n", i, B.region_data[i].area, B.region_data[i].label, B.region_data[i].x, B.region_data[i].y, x, y);
+        // printf("%d, Area: %d, Label: %d, Image x = %g, y = %g. x = %g, y = %g\n", i, B.region_data[i].area, B.region_data[i].label, B.region_data[i].x, B.region_data[i].y, x, y);
 
 
-        if (state->origin_x - 3 * state->interval_x <= x && x <= state->origin_x && state->origin_y <= y && y <= state->origin_y + 3 * state->interval_y) {
-            int idx_i = int((state->origin_x - x) / state->interval_x);
-            int idx_j = int((y - state->origin_y) / state->interval_y);
-            printf("---%d, Area: %d, Label: %d, Image x = %g, y = %g. Index: x = %d, y = %d\n", i, B.region_data[i].area, B.region_data[i].label, B.region_data[i].x, B.region_data[i].y, idx_i, idx_j);
+        if (state->origin_x - 2.5 * state->interval_x <= x && x <= state->origin_x + 0.5 * state->interval_x && 
+            state->origin_y - 0.5 * state->interval_y <= y && y <= state->origin_y + 2.5 * state->interval_y) {
+            int idx_i = int((state->origin_x + 0.5 * state->interval_x - x) / state->interval_x);
+            int idx_j = int((y - (state->origin_y - 0.5 * state->interval_y)) / state->interval_y);
+            printf("---%d, Area: %d, Label: %d, Image x = %g, y = %g. Index: x = %d, y = %d ", i, B.region_data[i].area, B.region_data[i].label, B.region_data[i].x, B.region_data[i].y, idx_i, idx_j);
 
             if (B.region_data[i].label == 1) {
                 cout << "Is R" << endl;
                 board_state[idx_i + 3 * idx_j] = 'R';
+                render_blob("circle", vx_x, vx_y, vx_orange);
             } else if (B.region_data[i].label == 2) {
                 cout << "Is G" << endl;
                 board_state[idx_i + 3 * idx_j] = 'G';
+                render_blob("circle", vx_x, vx_y, vx_green);
             }
         }
     }
+    vx_buffer_swap (vx_world_get_buffer (state->vxworld, "Debug_Buffer"));
+}
+
+int find_free_piece(blob_detect& B, double& ball_x, double& ball_y) {
+    int ret = -1;
+    for(size_t i = 0, j = 0; i < B.region_data.size(); i++){
+        // my pieces
+        double x, y;
+        double vx_x, vx_y;
+        get_camera_to_arm(B.region_data[i].x, B.region_data[i].y, x, y);
+        convert_image_to_vx_coords(B.region_data[i].x, B.region_data[i].y, vx_x, vx_y);
+        
+        if(B.region_data[i].area < 100)
+            continue; 
+        // printf("%d, Area: %d, Label: %d, Image x = %g, y = %g. x = %g, y = %g\n", i, B.region_data[i].area, B.region_data[i].label, B.region_data[i].x, B.region_data[i].y, x, y);
+
+
+        if (!(state->origin_x - 2.5 * state->interval_x <= x && x <= state->origin_x + 0.5 * state->interval_x && 
+            state->origin_y - 0.5 * state->interval_y <= y && y <= state->origin_y + 2.5 * state->interval_y)) {
+            if (B.region_data[i].label == 1) {
+                cout << "Is R" << endl;
+                // board_state[idx_i + 3 * idx_j] = 'R';
+                render_blob("circle", vx_x, vx_y, vx_orange);
+                ball_x = x;
+                ball_y = y;
+                ret = 0;
+            } else if (B.region_data[i].label == 2) {
+                cout << "Is G" << endl;
+                // board_state[idx_i + 3 * idx_j] = 'G';
+                render_blob("circle", vx_x, vx_y, vx_green);
+            }
+        }
+    }
+    return ret;
 }
 
 int main (int argc, char *argv[])
@@ -625,6 +790,14 @@ int main (int argc, char *argv[])
     //                      *opponent color [...]]
     vector<int> bbox(4);
     vector<vector<double> > hsv_ranges(3, vector<double>(6));
+
+    //initialize LCM
+    /*comms C;
+    lcm_inst.subscribe("TTT_TURN", &comms::ttt_turn_handler, &C); 
+    pthread_t ttt_comm;
+    pthread_create(&ttt_comm, NULL, lcm_comm, NULL);
+    ttt_turn_t msg;
+    ttt_turn_t *msg_ptr = &msg;*/
 
     read_bbox_and_colors(bbox, hsv_ranges);
     //start vx
@@ -647,8 +820,7 @@ int main (int argc, char *argv[])
     calibrate_coordinate_converter(B, bbox, hsv_ranges);
 
 
-    while (1) {
-        // wait_turn();
+    while (true) {
         string board_state;
         get_board_state(board_state, B, hsv_ranges);
 
@@ -657,10 +829,19 @@ int main (int argc, char *argv[])
             if ((i-2) % 3 == 0)
                 cout << endl;
         }
-        // double ball_x, ball_y;
-        // find_free_piece(ball_x, ball_y);
-        // int idx = AiPlayer.aiPlay();
-        // make_move(ball_x, ball_y, idx % 3, idx / 3);
+        double ball_x, ball_y;
+        if (find_free_piece(B, ball_x, ball_y) == -1)
+            break;
+        int idx = 
+        make_move(ball_x, ball_y, idx % 3, idx / 3);
+
+	//wait 10 seconds for arm to finish moving
+	usleep(500000);
+	
+	//publish the done message
+	//update message data
+	//lcm_inst.publish("TTT_TURN", msg_ptr);
+	
     }
 
     pthread_join (vx_thread, NULL);
