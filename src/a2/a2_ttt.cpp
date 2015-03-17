@@ -55,26 +55,48 @@ void *lcm_comm(void *input){
 struct move_t{
   int64_t utime;
   int32_t turn;
+
+  move_t(){
+    turn = 0;
+    utime = 0;
+  }
+  
 };
 
-/*
+
 struct comms{
   move_t current;
   move_t last;
   bool move_done;
+  bool is_red;
+  int our_turn;
 
   comms(){
     move_done = false;
-
+    our_turn = 0;
   }
 
   void ttt_turn_handler(const lcm::ReceiveBuffer* rbuf, const string &channel, const ttt_turn_t* msg){
     pthread_mutex_lock(&md);
-    move_done = true;
     last = current;
     current.utime = msg->utime;
     current.turn = msg->turn;
     pthread_mutex_unlock(&md);
+    wait();
+  }
+
+  void wait(){
+    if(last.turn == current.turn && !is_red)
+        move_done = false;
+    else if(last.turn < current.turn && !is_red)
+        move_done = true;
+    else if(last.turn == current.turn && is_red)
+        move_done = true;
+    else
+        move_done = false;
+
+
+
   }
 
   bool wait_turn(){
@@ -88,11 +110,11 @@ struct comms{
   }
 
 };
-*/
 
-void wait_turn() {
-    usleep(10000000);
-}
+
+// void wait_turn() {
+//     usleep(10000000);
+// }
 
 // It's good form for every application to keep its state in a struct.
 struct state_t {
@@ -373,6 +395,7 @@ void* start_vx(void* user) {
     getopt_add_bool   (state->gopt,  'h', "help", 0, "Show help");
     getopt_add_string (state->gopt, '\0', "url", "", "Camera URL");
     getopt_add_bool   (state->gopt,  'l', "list", 0, "Lists available camera URLs and exit");
+    getopt_add_bool   (state->gopt, 'r', "isred", 0, "red balls"); 
 
     if (!getopt_parse (state->gopt, argc, argv, 1) || getopt_get_bool (state->gopt, "help")) {
         printf ("Usage: %s [--url=CAMERAURL] [other options]\n\n", argv[0]);
@@ -680,6 +703,7 @@ void calibrate_coordinate_converter(blob_detect &B, vector<int>& bbox, vector<ve
     double test_c[3] = {Cmat[0], Cmat[3], 1};
     double test_a[3] = {-69, -69, -69};
     state->converter.camera_to_arm(test_a, test_c);
+    printf()
     printf("The first arm coordinate should be %g, %g\n", test_a[0], test_a[1]);
     state->converter_initialized = true;
     // calibrate_ttt_grid(blue_squares);
@@ -786,6 +810,17 @@ int find_free_piece(blob_detect& B, double& ball_x, double& ball_y) {
     return ret;
 }
 
+ttt_turn_t * init_turn_lcm(ttt_turn_t& msg) {
+    //initialize LCM
+    comms C;
+    lcm_inst.subscribe("TTT_TURN", &comms::ttt_turn_handler, &C); 
+    pthread_t ttt_comm;
+    pthread_create(&ttt_comm, NULL, lcm_comm, NULL);
+    ttt_turn_t *msg_ptr = &msg;
+
+    return msg_ptr;
+}
+
 int main (int argc, char *argv[])
 {
     //read bounding box and color hsv ranges
@@ -794,14 +829,8 @@ int main (int argc, char *argv[])
     //                      *opponent color [...]]
     vector<int> bbox(4);
     vector<vector<double> > hsv_ranges(3, vector<double>(6));
-
-    //initialize LCM
-    /*comms C;
-    lcm_inst.subscribe("TTT_TURN", &comms::ttt_turn_handler, &C); 
-    pthread_t ttt_comm;
-    pthread_create(&ttt_comm, NULL, lcm_comm, NULL);
-    ttt_turn_t msg;
-    ttt_turn_t *msg_ptr = &msg;*/
+    string player_type;
+    
 
     read_bbox_and_colors(bbox, hsv_ranges);
     //start vx
@@ -816,6 +845,9 @@ int main (int argc, char *argv[])
         usleep(100000);
     }
 
+    ttt_turn_t msg;
+    ttt_turn_t * msg_ptr = init_turn_lcm(msg);
+
 
     blob_detect B;
     B.get_mask(bbox);
@@ -826,41 +858,46 @@ int main (int argc, char *argv[])
 
 
     while (true) {
-        wait_turn();
+        
+        if(C.wait_turn()){
+            string board_state;
+            get_board_state(board_state, B, hsv_ranges);
 
-        string board_state;
-        get_board_state(board_state, B, hsv_ranges);
+            for (int i = 0; i < 9; ++i) {
+                cout << board_state[i];
+                if ((i-2) % 3 == 0)
+                    cout << endl;
+            }
+            double ball_x, ball_y;
+            if (find_free_piece(B, ball_x, ball_y) == -1)
+                break;
 
-        for (int i = 0; i < 9; ++i) {
-            cout << board_state[i];
-            if ((i-2) % 3 == 0)
-                cout << endl;
+            ai.receiveBoard(board_state);
+            if(ai.checkEnd()) {
+                break;
+            }
+            int idx = ai.findNewMove();
+
+            make_move(ball_x, ball_y, idx % 3, idx / 3);
+            msg_ptr->turn = C.current.turn + 1;
+            // Check winning.
+            board_state[idx] = 'R';
+            ai.receiveBoard(board_state);
+            if(ai.checkEnd())
+                break;
+
+            
         }
-        double ball_x, ball_y;
-        if (find_free_piece(B, ball_x, ball_y) == -1)
-            break;
 
-        ai.receiveBoard(board_state);
-        if(ai.checkEnd()) {
-            break;
-        }
-        int idx = ai.findNewMove();
-
-        make_move(ball_x, ball_y, idx % 3, idx / 3);
-
-        // Check winning.
-        board_state[idx] = 'R';
-        ai.receiveBoard(board_state);
-        if(ai.checkEnd())
-            break;
-
+    }
 
 	//wait 10 seconds for arm to finish moving
-	usleep(500000);
+	//usleep(500000);
 	
 	//publish the done message
 	//update message data
-	//lcm_inst.publish("TTT_TURN", msg_ptr);
+
+	lcm_inst.publish(player_type, msg_ptr);
 	
     }
 
