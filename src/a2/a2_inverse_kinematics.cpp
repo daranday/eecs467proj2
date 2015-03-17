@@ -95,8 +95,8 @@ void move_to(double x, double y, double z, double wrist_tilt) {
         gamma = pi;
     }
 
-    printf("M: %g, alpha: %g, beta0: %g, gamma0: %g, R: %g\n", M, alpha, (-pow(arm_length[2], 2) + pow(arm_length[1], 2) + pow(M, 2)) / (2 * arm_length[1] * M), (+pow(arm_length[2], 2) + pow(arm_length[1], 2) - pow(M, 2)) / (2 * arm_length[1] * arm_length[2]), R);
-    printf("d2: %g, d3: %g, M: %g\n", arm_length[1], arm_length[2], M);
+    // printf("M: %g, alpha: %g, beta0: %g, gamma0: %g, R: %g\n", M, alpha, (-pow(arm_length[2], 2) + pow(arm_length[1], 2) + pow(M, 2)) / (2 * arm_length[1] * M), (+pow(arm_length[2], 2) + pow(arm_length[1], 2) - pow(M, 2)) / (2 * arm_length[1] * arm_length[2]), R);
+    // printf("d2: %g, d3: %g, M: %g\n", arm_length[1], arm_length[2], M);
 
     kin_state->cmd_angles[1] = pi/2 - alpha - beta;
     kin_state->cmd_angles[2] = pi - gamma;
@@ -149,15 +149,19 @@ void relax_arm() {
 }
 
 void arm_fetch() {
-    cout << "Fetching" << endl;
+    cout << "Fetching..." << endl;
     // lower claw
+    cout << "Lowering Claw" << endl;
     move_to(kin_state->cmd_position[0], kin_state->cmd_position[1], 0.1);
 
     // straighten shoulder
+    cout << "Closing Claw" << endl;
+
     kin_state->cmd_angles[5] = -(pi/2);
     move_joints(kin_state->cmd_angles);
     
     // raise claw
+    cout << "Raising Claw" << endl;
     move_to(kin_state->cmd_position[0], kin_state->cmd_position[1], 0.13);
 }
 

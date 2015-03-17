@@ -33,7 +33,7 @@
 #include "a2_blob_detector.h"
 #include "a2_inverse_kinematics.h"
 #include "a2_image_to_arm_coord.h"
-//#include "a2_ai.h"
+#include "a2_ai.h"
 
 //lcm
 #include "lcm/lcm-cpp.hpp"
@@ -90,6 +90,9 @@ struct comms{
 };
 */
 
+void wait_turn() {
+    usleep(10000000);
+}
 
 // It's good form for every application to keep its state in a struct.
 struct state_t {
@@ -171,7 +174,8 @@ void convert_image_to_vx_coords(double image_x, double image_y, double& vx_x, do
     // cout << "----------" << vx_x << ", " << vx_y << endl;
 }
 
-void make_move(double ball_x, double ball_y, double idx_i, double idx_j) {
+void make_move(double ball_x, double ball_y, int idx_i, int idx_j) {
+    printf("Moving piece to Position (%d, %d)\n", idx_i, idx_j);
     move_to(ball_x, ball_y, 0.13);
     arm_fetch();
     move_to(-(idx_i) * state->interval_x + state->origin_x, (idx_j) * state->interval_y + state->origin_y, 0.13);
@@ -606,8 +610,8 @@ void calibrate_coordinate_converter(blob_detect &B, vector<int>& bbox, vector<ve
     double Cmat[9] = {  0, 0, 0,
                         0, 0, 0,
                         1, 1, 1};
-    double Amat[9] = {  0, 0, 0,
-                        0, 0, 0,
+    double Amat[9] = {  0.12, -0.12, 0.12,
+                        0, 0, 0.24,
                         1, 1, 1};
 
     vector<double> blue_squares(12);
@@ -664,8 +668,8 @@ void calibrate_coordinate_converter(blob_detect &B, vector<int>& bbox, vector<ve
             double x, y;
             get_coordinates_from_joints(x, y);
             printf("X: %g, Y: %g\n", x, y);
-            Amat[i] = x;
-            Amat[i+3] = y;
+            // Amat[i] = x;
+            // Amat[i+3] = y;
         }
         save_matrices(Amat, Cmat);
     }
@@ -766,14 +770,14 @@ int find_free_piece(blob_detect& B, double& ball_x, double& ball_y) {
         if (!(state->origin_x - 2.5 * state->interval_x <= x && x <= state->origin_x + 0.5 * state->interval_x && 
             state->origin_y - 0.5 * state->interval_y <= y && y <= state->origin_y + 2.5 * state->interval_y)) {
             if (B.region_data[i].label == 1) {
-                cout << "Is R" << endl;
+                // cout << "Is R" << endl;
                 // board_state[idx_i + 3 * idx_j] = 'R';
                 render_blob("circle", vx_x, vx_y, vx_orange);
                 ball_x = x;
                 ball_y = y;
                 ret = 0;
             } else if (B.region_data[i].label == 2) {
-                cout << "Is G" << endl;
+                // cout << "Is G" << endl;
                 // board_state[idx_i + 3 * idx_j] = 'G';
                 render_blob("circle", vx_x, vx_y, vx_green);
             }
@@ -816,11 +820,14 @@ int main (int argc, char *argv[])
     blob_detect B;
     B.get_mask(bbox);
     B.get_colors(hsv_ranges);
+    AI ai;
     
     calibrate_coordinate_converter(B, bbox, hsv_ranges);
 
 
     while (true) {
+        wait_turn();
+
         string board_state;
         get_board_state(board_state, B, hsv_ranges);
 
@@ -832,8 +839,21 @@ int main (int argc, char *argv[])
         double ball_x, ball_y;
         if (find_free_piece(B, ball_x, ball_y) == -1)
             break;
-        int idx = 
+
+        ai.receiveBoard(board_state);
+        if(ai.checkEnd()) {
+            break;
+        }
+        int idx = ai.findNewMove();
+
         make_move(ball_x, ball_y, idx % 3, idx / 3);
+
+        // Check winning.
+        board_state[idx] = 'R';
+        ai.receiveBoard(board_state);
+        if(ai.checkEnd())
+            break;
+
 
 	//wait 10 seconds for arm to finish moving
 	usleep(500000);

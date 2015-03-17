@@ -3,27 +3,7 @@
 #include <string>
 #include <utility>
 #include <cmath>
-
-using namespace std;
-
-class AI {
-public:
-    AI();
-    string board;
-    int move;
-    int findNewMove();
-    int findNewMoveHelper();
-    void printBoard();
-    void aiPlay();
-    void oppPlay();
-    void receiveBoard(string newBoard);
-    bool isBoardEmpty();
-    int twoD2oneD(int x, int y);
-    pair<int, int> oneD2twoD(int x);
-    bool isValidCoord2D(int x, int y);
-    bool checkEnd();
-
-};
+#include "a2_ai.h"
 
 AI::AI() {
     board = ".........";
@@ -46,10 +26,10 @@ bool AI::checkEnd() {
         }
 
         if(redCount == 3) {
-            cout << "Red Wins!" << endl;
+            cout << "We Win!" << endl;
             return true;
         } else if(greenCount == 3) {
-            cout << "Green Wins!" << endl;
+            cout << "We Lost!" << endl;
             return true;
         }
     }
