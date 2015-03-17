@@ -1,7 +1,8 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <utility> 
+#include <utility>
+#include <cmath>
 
 using namespace std;
 
@@ -11,6 +12,7 @@ public:
     string board;
     int move;
     int findNewMove();
+    int findNewMoveHelper();
     void printBoard();
     void aiPlay();
     void oppPlay();
@@ -137,6 +139,12 @@ void AI::printBoard() {
 }
 
 int AI::findNewMove() {
+
+    return abs(findNewMoveHelper() - 8);
+
+}
+
+int AI::findNewMoveHelper() {
 
     if(isBoardEmpty()) {
         cout << "board is empty" << endl;
