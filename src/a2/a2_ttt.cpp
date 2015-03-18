@@ -813,6 +813,14 @@ int find_free_piece(blob_detect& B, double& ball_x, double& ball_y) {
     return ret;
 }
 
+bool manual_wait_turn() {
+    string y;
+    cout << "Our turn? ";
+    cin >> y;
+    cin.ignore(1);
+    return true;
+}
+
 int main (int argc, char *argv[])
 {
     //read bounding box and color hsv ranges
@@ -839,6 +847,7 @@ int main (int argc, char *argv[])
         usleep(100000);
     }
 
+    usleep(1000000);
 
     blob_detect B;
     cout << "\n============ GET MASK =============\n";
@@ -885,7 +894,7 @@ int main (int argc, char *argv[])
         msg_ptr=new ttt_turn_t;
         string board_state;
         //cout << "running" << endl;
-        if(C.wait_turn()){
+        if(manual_wait_turn()){
             cout << "doing things" << endl;
             get_board_state(board_state, B, hsv_ranges);
             
@@ -925,7 +934,7 @@ int main (int argc, char *argv[])
 
         }
         
-        //get_board_state(board_state, B, hsv_ranges);
+        get_board_state(board_state, B, hsv_ranges);
         pthread_mutex_lock(&md);
         cout << "our turn: " << C.our_turn << " opponent turn: " << C.current.turn << endl;
         pthread_mutex_unlock(&md);
