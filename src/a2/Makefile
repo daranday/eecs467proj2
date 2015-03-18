@@ -21,9 +21,10 @@ BIN_A2_INVERSE_KINEMATICS = $(BIN_PATH)/a2_inverse_kinematics
 BIN_A2_IMAGE_TO_ARM_COORD = $(BIN_PATH)/a2_image_to_arm_coord
 BIN_A2_AI = $(BIN_PATH)/a2_ai
 BIN_A2_TTT = $(BIN_PATH)/a2_ttt
+BIN_A2_ARM_TEST = $(BIN_PATH)/a2_arm_test
 
 ALL = $(BIN_A2_MASK) $(BIN_A2_COLOR_PICKER) \
-		$(BIN_A2_TTT) # $(BIN_A2_BLOB_DETECTOR) $(BIN_A2_INVERSE_KINEMATICS) $(BIN_A2_IMAGE_TO_ARM_COORD)   $(BIN_A2_AI)\
+		$(BIN_A2_TTT) $(BIN_A2_ARM_TEST) # $(BIN_A2_BLOB_DETECTOR) $(BIN_A2_INVERSE_KINEMATICS) $(BIN_A2_IMAGE_TO_ARM_COORD)   $(BIN_A2_AI)\
 
 all: $(ALL)
 
@@ -53,6 +54,10 @@ $(BIN_A2_COLOR_PICKER): a2_color_picker.o $(LIBDEPS) $(LIBEECS467_OBJS)
 # 	@$(CXX) -o $@ $^ $(LDFLAGS) $(CXXFLAGS)
 
 $(BIN_A2_TTT): a2_ttt.o a2_blob_detector.o a2_inverse_kinematics.o a2_image_to_arm_coord.o a2_ai.o $(LIBDEPS) $(LIBEECS467_OBJS)
+	@echo "\t$@"
+	@$(CXX) -o $@ $^ $(LDFLAGS) $(CXXFLAGS)
+
+$(BIN_A2_ARM_TEST):  a2_arm_test.o $(LIBDEPS) $(LIBEECS467_OBJS)
 	@echo "\t$@"
 	@$(CXX) -o $@ $^ $(LDFLAGS) $(CXXFLAGS)
 

@@ -20,6 +20,7 @@ blob_detect::~blob_detect(){
 
 void blob_detect::run(image_u32_t *image_32){
   get_u8x3(image_32);
+  //image_u32_destroy(image_32);
   region = 1;
   region_data.clear();
   region_83 = image_u8x3_create( image_83->width, image_83->height );

@@ -37,7 +37,7 @@
 
 //lcm
 #include "lcm/lcm-cpp.hpp"
-//#include "lcmtypes/ttt_turn_t.hpp"
+#include "lcmtypes/ttt_turn_t.hpp"
 
 using namespace std;
 
@@ -49,7 +49,7 @@ void *lcm_comm(void *input){
   while(true){
     lcm_inst.handle();
   }
-
+  return NULL;
 }
 
 struct move_t{
@@ -66,49 +66,53 @@ struct move_t{
 
 struct comms{
   move_t current;
-  move_t last;
-  bool move_done;
+  bool c_move;
   bool is_red;
   int our_turn;
 
   comms(){
-    move_done = false;
+    c_move = false;
     our_turn = 0;
   }
 
   void ttt_turn_handler(const lcm::ReceiveBuffer* rbuf, const string &channel, const ttt_turn_t* msg){
     pthread_mutex_lock(&md);
-    last = current;
     current.utime = msg->utime;
     current.turn = msg->turn;
     pthread_mutex_unlock(&md);
-    wait();
+    can_move();
   }
 
-  void wait(){
-    if(last.turn == current.turn && !is_red)
-        move_done = false;
-    else if(last.turn < current.turn && !is_red)
-        move_done = true;
-    else if(last.turn == current.turn && is_red)
-        move_done = true;
-    else
-        move_done = false;
-
-
-
+  void can_move(){
+    pthread_mutex_lock(&md);
+    if(is_red){
+        if(our_turn == current.turn){
+            c_move = true;
+        }
+        else if(our_turn > current.turn)
+            c_move= false;
+    }
+    else{
+        if(our_turn == current.turn)
+            c_move = false;
+        else if(our_turn < current.turn){
+            c_move = true;
+        }
+    }
+    pthread_mutex_unlock(&md);
   }
 
   bool wait_turn(){
-    bool temp;
+    bool ret;
     pthread_mutex_lock(&md);
-    temp = move_done;
-    move_done = false;
+    ret = c_move;
+    c_move = false;
     pthread_mutex_unlock(&md);
-    return temp;
-    
-  }
 
+    return ret;
+
+  }
+  
 };
 
 
@@ -228,7 +232,7 @@ mouse_event (vx_event_handler_t *vxeh, vx_layer_t *vl, vx_camera_pos_t *pos, vx_
             state->converter.camera_to_arm(arm_vector, camera_vector);
             printf("Camera coords: %g, %g\nArm coords: %g, %g", camera_vector[0], camera_vector[1], arm_vector[0], arm_vector[1]);
 
-            int a;
+            //int a;
 
             make_move(arm_vector[0], arm_vector[1], state->balls_placed % 3, state->balls_placed / 3);
             state->balls_placed++;
@@ -648,7 +652,7 @@ void calibrate_coordinate_converter(blob_detect &B, vector<int>& bbox, vector<ve
         printf("Blue color HSV range is: [%g, %g, %g, %g, %g, %g]\n", hsv_ranges[0][0], hsv_ranges[0][1], hsv_ranges[0][2], hsv_ranges[0][3], hsv_ranges[0][4], hsv_ranges[0][5]);
         vector<int> blue_blobs_order = {0, 0, 0, 0};
         // showing blue square coordinates
-        for(size_t i = 0, j = 0; i < B.region_data.size(); i++){
+        for(size_t i = 0; i < B.region_data.size(); i++){
             if(B.region_data[i].area > 100 && is_color(B.region_data[i], hsv_ranges[0])){
                 printf("Blue square %d -- x: %g, y: %g, area: %d\n", int(i), B.region_data[i].x, B.region_data[i].y, B.region_data[i].area);
             }
@@ -703,7 +707,6 @@ void calibrate_coordinate_converter(blob_detect &B, vector<int>& bbox, vector<ve
     double test_c[3] = {Cmat[0], Cmat[3], 1};
     double test_a[3] = {-69, -69, -69};
     state->converter.camera_to_arm(test_a, test_c);
-    printf()
     printf("The first arm coordinate should be %g, %g\n", test_a[0], test_a[1]);
     state->converter_initialized = true;
     // calibrate_ttt_grid(blue_squares);
@@ -810,17 +813,6 @@ int find_free_piece(blob_detect& B, double& ball_x, double& ball_y) {
     return ret;
 }
 
-ttt_turn_t * init_turn_lcm(ttt_turn_t& msg) {
-    //initialize LCM
-    comms C;
-    lcm_inst.subscribe("TTT_TURN", &comms::ttt_turn_handler, &C); 
-    pthread_t ttt_comm;
-    pthread_create(&ttt_comm, NULL, lcm_comm, NULL);
-    ttt_turn_t *msg_ptr = &msg;
-
-    return msg_ptr;
-}
-
 int main (int argc, char *argv[])
 {
     //read bounding box and color hsv ranges
@@ -830,7 +822,9 @@ int main (int argc, char *argv[])
     vector<int> bbox(4);
     vector<vector<double> > hsv_ranges(3, vector<double>(6));
     string player_type;
+    string player_color;
     
+    cout << "\n============ PROGRAM BEGIN =============\n";
 
     read_bbox_and_colors(bbox, hsv_ranges);
     //start vx
@@ -845,24 +839,56 @@ int main (int argc, char *argv[])
         usleep(100000);
     }
 
-    ttt_turn_t msg;
-    ttt_turn_t * msg_ptr = init_turn_lcm(msg);
-
 
     blob_detect B;
+    cout << "\n============ GET MASK =============\n";
     B.get_mask(bbox);
+    cout << "\n============ GET COLORS =============\n";
     B.get_colors(hsv_ranges);
+
+    cout << " which player are you? (red or green)\n color: ";
+    cin >> player_color;
     AI ai;
     
+    cout << "\n============ CALIBRATE COORDINATE CONVERTER =============\n";
     calibrate_coordinate_converter(B, bbox, hsv_ranges);
 
+    cout << "\n============ INIT LCM =============\n";
 
+    //LCM initialization
+    comms C;
+    string p_channel;
+    pthread_mutex_lock(&md);
+    if(player_color == "red")
+        C.is_red = true;
+    else
+        C.is_red = false;
+    pthread_mutex_unlock(&md);
+    if(C.is_red){
+        lcm_inst.subscribe("GREEN_TURN", &comms::ttt_turn_handler, &C);
+        p_channel = "RED_TURN";
+    }
+    else{
+        lcm_inst.subscribe("RED_TURN", &comms::ttt_turn_handler, &C); 
+        p_channel = "GREEN_TURN";
+    } 
+
+    pthread_t ttt_comm;
+    pthread_create(&ttt_comm, NULL, lcm_comm, NULL);
+    ttt_turn_t msg;
+    ttt_turn_t *msg_ptr = &msg;
+    //done with lcm initialization
+
+
+    cout << "\n============ MAIN PROGRAM RUNNING =============\n";
     while (true) {
-        
+        msg_ptr=new ttt_turn_t;
+        string board_state;
+        //cout << "running" << endl;
         if(C.wait_turn()){
-            string board_state;
+            cout << "doing things" << endl;
             get_board_state(board_state, B, hsv_ranges);
-
+            
             for (int i = 0; i < 9; ++i) {
                 cout << board_state[i];
                 if ((i-2) % 3 == 0)
@@ -879,26 +905,35 @@ int main (int argc, char *argv[])
             int idx = ai.findNewMove();
 
             make_move(ball_x, ball_y, idx % 3, idx / 3);
-            msg_ptr->turn = C.current.turn + 1;
-            // Check winning.
-            board_state[idx] = 'R';
-            ai.receiveBoard(board_state);
-            if(ai.checkEnd())
-                break;
-
             
+            //sleep long enough to finish turn
+            for(int i = 0; i < 200; i++){
+                cout << "doing things" << endl;
+                lcm_inst.publish(p_channel, msg_ptr);
+                usleep(50000);
+            }
+
+            get_board_state(board_state, B, hsv_ranges);
+            usleep(10000);
+            ai.receiveBoard(board_state);
+
+            ++C.our_turn;
+
+            if(ai.checkEnd()) {
+                break;
+            }
+
         }
+        
+        //get_board_state(board_state, B, hsv_ranges);
+        pthread_mutex_lock(&md);
+        cout << "our turn: " << C.our_turn << " opponent turn: " << C.current.turn << endl;
+        pthread_mutex_unlock(&md);
 
-    }
-
-	//wait 10 seconds for arm to finish moving
-	//usleep(500000);
-	
-	//publish the done message
-	//update message data
-
-	lcm_inst.publish(player_type, msg_ptr);
-	
+        msg_ptr->turn = C.our_turn;
+        usleep(50000);
+        lcm_inst.publish(p_channel, msg_ptr);
+        delete msg_ptr;
     }
 
     pthread_join (vx_thread, NULL);

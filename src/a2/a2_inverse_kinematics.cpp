@@ -177,8 +177,17 @@ void arm_drop() {
 void stand_arm() {
     const double claw_rest_angle_c = -(pi/2 * 4/5.);
     vector<double> initial_joints = {0, 0, 0, 0, 0, claw_rest_angle_c};
+    kin_state->cmd_angles[0] = pi;
+    kin_state->cmd_angles[1] = -pi/6;
+    move_joints(kin_state->cmd_angles);
+    usleep(10000);
+    kin_state->cmd_angles = initial_joints;
+    kin_state->cmd_angles[0] = pi;
+    move_joints(kin_state->cmd_angles);
+    usleep(10000);
     kin_state->cmd_angles = initial_joints;
     move_joints(initial_joints);
+    // cout << "standing" << endl;
 }
 
 // This subscribes to the status messages sent out by the arm, displaying servo
